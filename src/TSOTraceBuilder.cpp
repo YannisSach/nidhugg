@@ -22,6 +22,7 @@
 
 #include <sstream>
 #include <stdexcept>
+#include <iostream>
 
 TSOTraceBuilder::TSOTraceBuilder(const Configuration &conf) : TSOPSOTraceBuilder(conf) {
   threads.push_back(Thread(CPid(),{}));
@@ -96,6 +97,7 @@ bool TSOTraceBuilder::schedule(int *proc, int *aux, int *alt, bool *dryrun){
     assert(prefix[prefix.size()-1].branch.empty());
     assert(prefix[prefix.size()-1].wakeup.empty());
     ++prefix[prefix.size()-2].size;
+    prefix[prefix.size()-2].spawned_thread = prefix[prefix.size()-1].spawned_thread;
     prefix.pop_back();
     --prefix_idx;
   }
@@ -111,13 +113,58 @@ bool TSOTraceBuilder::schedule(int *proc, int *aux, int *alt, bool *dryrun){
    */
   const unsigned sz = threads.size();
   unsigned p;
+  //get the current count from the previous prefix because a refused schedule might had happened
+  if(prefix_idx > 0)
+    bound_cnt = prefix[prefix_idx-1].current_cnt;
+
+  // std::cout << "Scheduling :" << prefix_idx << "\n"; 
+  // if(prefix_idx)
+  // std::cout << "Previous was :" << prefix[prefix_idx-1].iid.get_pid() << "\n";
+  int previous_id = prefix_idx ? prefix[prefix_idx - 1].iid.get_pid() : 0;
+  bool is_previous_available = threads.size() > previous_id && prefix_idx ? threads[previous_id].available : false ;
+  // if(is_previous_available)
+    // std::cout<<prefix_idx<<" Available:"<<previous_id<<" "<<threads[previous_id].available << " \n";
+  // else
+    // std::cout << prefix_idx << " Not Available:" << previous_id << " " << false << "\n";
+  //for(int i=0;i<prefix.size();i++){
+  //  std::cout<<prefix[i].current_cnt<<" ";
+  //}
+  //std::cout<<"\n";
+ //  std::cout << "Available:\n";
+ //  for(p = 0; p < sz; p++){
+ //    std::cout<< threads[p].available << ",";
+ //  }
+ //  std::cout << "\nAwake:\n";
+
+ // for(p = 0; p < sz; p++){
+ //    std::cout<< !threads[p].sleeping << ",";
+ //  }
+ //  std::cout<<"\n";
+  if(conf.preemption_bound >=0 && bound_cnt > conf.preemption_bound){
+        return false;
+      } 
+
+retry:
   for(p = 1; p < sz; p += 2){ // Loop through auxiliary threads
     if(threads[p].available && !threads[p].sleeping &&
        (conf.max_search_depth < 0 || threads[p].clock[p] < conf.max_search_depth)){
       ++threads[p].clock[p];
       prefix.push_back(Event(IID<IPid>(IPid(p),threads[p].clock[p]),
                              threads[p].clock));
+
       *proc = p/2;
+      assert(int(prefix_idx.size()) - 1 == prefix_idx);
+      if(is_previous_available && p != previous_id)
+      {
+        bound_cnt++;
+      }if(conf.preemption_bound >=0 && bound_cnt > conf.preemption_bound) {
+        if(is_previous_available && p != previous_id)
+          bound_cnt--;
+        --threads[p].clock[p];
+        prefix.pop_back();
+        continue;
+      }
+      prefix[prefix_idx].current_cnt = bound_cnt;
       *aux = 0;
       return true;
     }
@@ -130,11 +177,48 @@ bool TSOTraceBuilder::schedule(int *proc, int *aux, int *alt, bool *dryrun){
       prefix.push_back(Event(IID<IPid>(IPid(p),threads[p].clock[p]),
                              threads[p].clock));
       *proc = p/2;
+      if(is_previous_available && p != previous_id)
+      {
+        // std::cout <<prefix_idx <<" " << p << " " << previous_id << "\n";
+        bound_cnt++;
+      }
+      if(conf.preemption_bound >=0 && bound_cnt > conf.preemption_bound) {
+        if(is_previous_available && p != previous_id)
+          bound_cnt--;
+        --threads[p].clock[p];
+        prefix.pop_back();
+        continue;
+      }
+      // std::cout << prefix_idx << " Scheduled: " << p << "\n";
+      prefix[prefix_idx].current_cnt = bound_cnt;
       *aux = -1;
+      // std::cout << prefix_idx << ":" << bound_cnt <<"Scheduled" << prefix[prefix_idx].iid.get_pid() << "\n";
       return true;
     }
   }
 
+  if(conf.preemption_bound >= 0){
+
+
+    for(p = 0; p < sz; p++){
+      threads[p].sleeping = false;
+      prefix[prefix_idx-1].wakeup.insert(p);
+    }
+    bool nobody_available = true;
+    for(p = 0; p < sz && nobody_available; p++){
+      if(threads[p].available)
+        nobody_available = false;
+    }
+    if(!nobody_available){
+      // threads[0].available = true;
+    if(hard_reset_allowed <= 0){
+      return false;
+    }
+      // std::cout<< "Forced to wakeup at "<< prefix_idx << "...\n";
+      hard_reset_allowed--;
+      goto retry;
+    }
+  }
   return false; // No available threads
 }
 
@@ -213,11 +297,18 @@ bool TSOTraceBuilder::reset(){
 
   int i;
   for(i = int(prefix.size())-1; 0 <= i; --i){
+    if( i > 0){
+      threads[prefix[i-1].iid.get_pid()].available = false;
+      if(prefix[i].current_cnt > prefix[i-1].current_cnt ||
+        (prefix[i].current_cnt == prefix[i-1].current_cnt && prefix[i].iid.get_pid() == prefix[i-1].iid.get_pid())) {
+        threads[prefix[i-1].iid.get_pid()].available = true;
+        // std::cout << prefix[i-1].iid.get_pid() << " became available\n";
+      }
+    }
     if(prefix[i].branch.size()){
       break;
     }
   }
-
   if(i < 0){
     /* No more branching is possible. */
     return false;
@@ -235,6 +326,12 @@ bool TSOTraceBuilder::reset(){
       }
     }
 
+    if(i>0){
+      bound_cnt = prefix[i-1].current_cnt;
+      if(prefix[i-1].iid.get_pid() != br.pid && threads[prefix[i-1].iid.get_pid()].available){
+        bound_cnt++;
+      }
+    }
     Event evt(IID<IPid>(br.pid,br_idx),{});
 
     evt.alt = br.alt;
@@ -242,12 +339,19 @@ bool TSOTraceBuilder::reset(){
     evt.branch.erase(br);
     evt.sleep = prefix[i].sleep;
     if(br.pid != prefix[i].iid.get_pid()){
-      evt.sleep.insert(prefix[i].iid.get_pid());
-    }
+      if(!bound_reset){
+        evt.sleep.insert(prefix[i].iid.get_pid());
+      }else{
+        bound_reset = false;
+      }
+    } 
+
     evt.sleep_branch_trace_count =
       prefix[i].sleep_branch_trace_count + estimate_trace_count(i+1);
 
     prefix[i] = evt;
+    //Yannis
+    prefix[i].current_cnt = bound_cnt;
 
     prefix.resize(i+1,prefix[0]);
   }
@@ -266,7 +370,6 @@ bool TSOTraceBuilder::reset(){
   replay = true;
   dry_sleepers = 0;
   last_md = 0;
-
   return true;
 }
 
@@ -316,6 +419,14 @@ void TSOTraceBuilder::debug_print() const {
       llvm::dbgs() << threads[sleep_set[i]].cpid;
     }
     llvm::dbgs() << "}";
+    llvm::dbgs() << " BNDCNT:{" << prefix[i].current_cnt << "}";
+    // if(conf.preemption_bound >= 0){
+    if(true){
+      if(i>0){
+        if(prefix[i].current_cnt < prefix[i-1].current_cnt)
+          llvm::dbgs() << "\nThis trace exceeded the bound limit\n";
+      }
+    }
     if(prefix[i].branch.size()){
       llvm::dbgs() << " branch: ";
       for(Branch b : prefix[i].branch){
@@ -346,6 +457,7 @@ void TSOTraceBuilder::spawn(){
   threads.push_back(Thread(child_cpid,threads[parent_ipid].clock));
   threads.push_back(Thread(CPS.new_aux(child_cpid),threads[parent_ipid].clock));
   threads.back().available = false; // Empty store buffer
+  curnode().spawned_thread = threads.size() - 2;
 }
 
 void TSOTraceBuilder::store(const ConstMRef &ml){
@@ -357,6 +469,7 @@ void TSOTraceBuilder::store(const ConstMRef &ml){
 
 void TSOTraceBuilder::atomic_store(const ConstMRef &ml){
   if(dryrun){
+  // std::cout << "atomic_store\n";
     assert(prefix_idx+1 < int(prefix.size()));
     assert(dry_sleepers <= prefix[prefix_idx+1].sleep.size());
     IPid pid = prefix[prefix_idx+1].sleep[dry_sleepers-1];
@@ -859,6 +972,14 @@ int TSOTraceBuilder::cond_destroy(const ConstMRef &ml){
   return rv;
 }
 
+
+bool TSOTraceBuilder::canRunThisInstruction(){
+  int a = conf.preemption_bound;
+  if(a < 0) return true;
+  return (!this->dryrun);
+  
+}
+
 void TSOTraceBuilder::register_alternatives(int alt_count){
   curnode().may_conflict = true;
   for(int i = curnode().alt+1; i < alt_count; ++i){
@@ -878,18 +999,71 @@ VecSet<TSOTraceBuilder::IPid> TSOTraceBuilder::sleep_set_at(int i){
   return sleep;
 }
 
-void TSOTraceBuilder::see_events(const VecSet<int> &seen_accesses){
+// void TSOTraceBuilder::see_events(const VecSet<int> &seen_accesses){// Finding I set or WI 
+//   /* Register new branches */
+//   std::vector<int> branch;
+//   for(int i : seen_accesses){
+//     if(i < 0) continue;
+//     const VClock<IPid> &iclock = prefix[i].clock;
+//     // This event happens before current event
+//     if(iclock.leq(curnode().clock)) continue;
+//     // there is another event happening before this one (not the current one)
+//     if(std::any_of(seen_accesses.begin(),seen_accesses.end(),
+//                    [i,&iclock,this](int j){
+//                      return 0 <= j && i != j && iclock.leq(this->prefix[j].clock);
+//                    })) continue;
+//     branch.push_back(i);
+//   }
+
+//   /* Add clocks from seen accesses */
+//   IPid ipid = curnode().iid.get_pid();
+//   for(int i : seen_accesses){
+//     if(i < 0) continue;
+//     assert(0 <= i && i <= prefix_idx);
+//     curnode().clock += prefix[i].clock;
+//     threads[ipid].clock += prefix[i].clock;
+//   }
+
+//   for(int i : branch){
+//     add_branch(i,prefix_idx);
+//   }
+// }
+
+
+void TSOTraceBuilder::see_events(const VecSet<int> &seen_accesses){// Finding I set or WI 
   /* Register new branches */
   std::vector<int> branch;
   for(int i : seen_accesses){
     if(i < 0) continue;
     const VClock<IPid> &iclock = prefix[i].clock;
+    // This event happens before current event
     if(iclock.leq(curnode().clock)) continue;
+    // there is another event happening before this one (not the current one)
     if(std::any_of(seen_accesses.begin(),seen_accesses.end(),
                    [i,&iclock,this](int j){
                      return 0 <= j && i != j && iclock.leq(this->prefix[j].clock);
                    })) continue;
+    // std::cout<< "Adding backtrack to " << i << "\n";
     branch.push_back(i);
+    int current_proc = prefix[i].iid.get_pid();
+    int k;
+    if(conf.preemption_bound >= 0 && conf.memory_model == Configuration::SC){
+    // if(false){
+      for(k = i-1; k>=0 && current_proc == prefix[k].iid.get_pid();   k--){
+        if(prefix[k].spawned_thread == prefix[prefix_idx].iid.get_pid()){
+           // std::cout << prefix[k].size -1 << ", "<< k << "\n";
+          break;
+        }
+      }
+      // if(false){
+      if(k > -1){
+        assert(prefix_idx < prefix.size());
+        // if(current_proc != prefix[k].iid.get_pid())
+          branch.push_back(k+1);
+      // std::cout<< "Adding backtrack2 to " << k << "\n";
+      } 
+   }
+     
   }
 
   /* Add clocks from seen accesses */
@@ -903,8 +1077,10 @@ void TSOTraceBuilder::see_events(const VecSet<int> &seen_accesses){
 
   for(int i : branch){
     add_branch(i,prefix_idx);
-  }
+  } 
+
 }
+
 
 void TSOTraceBuilder::add_branch(int i, int j){
   assert(0 <= i);
@@ -912,7 +1088,10 @@ void TSOTraceBuilder::add_branch(int i, int j){
   assert(j <= prefix_idx);
 
   VecSet<IPid> isleep = sleep_set_at(i);
-
+  if(bound_reset){
+    bound_reset = false;
+    isleep = sleep_set_at(0);
+  }
   /* candidates is a map from IPid p to event index i such that the
    * IID (p,i) identifies an event between prefix[i] (exclusive) and
    * prefix[j] (inclusive) such that (p,i) does not happen-after any
@@ -954,9 +1133,11 @@ void TSOTraceBuilder::add_branch(int i, int j){
        * prefix[i]. */
       return;
     }
+
   }
 
   assert(0 <= cand.pid);
+  // std::cout << "New candidate added \n";
   prefix[i].branch.insert(cand);
 }
 
@@ -1004,6 +1185,7 @@ void TSOTraceBuilder::wakeup(Access::Type type, void const *ml){
     }
   case Access::W:
     {
+      // std::cout << "Waking up for write access...\n";
       for(unsigned p = 0; p < threads.size(); ++p){
         if(threads[p].sleep_full_memory_conflict ||
            (int(p) + 1 != pid &&

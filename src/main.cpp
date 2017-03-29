@@ -90,7 +90,7 @@ int main(int argc, char *argv[]){
     Configuration conf;
     conf.assign_by_commandline();
     conf.check_commandline();
-
+    
     if(cl_transform != ""){
       Transform::transform(input_file,cl_transform,conf);
     }else{

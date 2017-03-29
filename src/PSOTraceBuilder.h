@@ -59,6 +59,7 @@ public:
   virtual bool cond_broadcast(const ConstMRef &ml);
   virtual bool cond_wait(const ConstMRef &cond_ml, const ConstMRef &mutex_ml);
   virtual int cond_destroy(const ConstMRef &ml);
+  virtual bool canRunThisInstruction() {return true;};
   virtual void register_alternatives(int alt_count);
   virtual int estimate_trace_count() const;
 protected:
@@ -336,7 +337,7 @@ protected:
     Event(const IID<IPid> &iid,
           const VClock<IPid> &clk)
       : iid(iid), origin_iid(iid), size(1), alt(0), md(0), clock(clk),
-        may_conflict(false), sleep_branch_trace_count(0) {};
+        may_conflict(false), sleep_branch_trace_count(0), bound(0) {};
     /* The identifier for the first event in this event sequence. */
     IID<IPid> iid;
     /* The IID of the program instruction which is the origin of this
@@ -382,6 +383,10 @@ protected:
      * explored traces.
      */
     int sleep_branch_trace_count;
+    /* Preemption bound counter
+     */
+    int bound;
+
   };
 
   /* The fixed prefix of events in the current execution. This may be

@@ -30,7 +30,7 @@
 #include "StrModule.h"
 #include "TSOInterpreter.h"
 #include "TSOTraceBuilder.h"
-
+#include <iostream>
 #include <fstream>
 #include <stdexcept>
 
@@ -195,9 +195,15 @@ DPORDriver::Result DPORDriver::run(){
   switch(conf.memory_model){
   case Configuration::SC:
     TB = new TSOTraceBuilder(conf);
+    //Yannis
+    TB->bound_cnt = 0;
+    TB->bound_reset = false;
+    TB->hard_reset_allowed = 10;
     break;
   case Configuration::TSO:
     TB = new TSOTraceBuilder(conf);
+    TB->bound_cnt = 0;
+    TB->bound_reset = false;
     break;
   case Configuration::PSO:
     TB = new PSOTraceBuilder(conf);

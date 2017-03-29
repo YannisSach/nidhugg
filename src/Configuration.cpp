@@ -76,6 +76,9 @@ static llvm::cl::list<std::string> cl_extfun_no_race("extfun-no-race",llvm::cl::
                                                                         "does not participate in any races. (See manual.)\n"
                                                                         "May be given multiple times."));
 
+static llvm::cl::opt<int> cl_preemption_bound("preemption-bound", llvm::cl::NotHidden,llvm::cl::init(-1), llvm::cl::value_desc("B"),
+                                              llvm::cl::desc("Perform a preemption bounded search with bound B."));
+
 const std::set<std::string> &Configuration::commandline_opts(){
   static std::set<std::string> opts = {
     "dpor-explore-all",
@@ -88,7 +91,8 @@ const std::set<std::string> &Configuration::commandline_opts(){
     "no-spin-assume",
     "unroll",
     "print-progress",
-    "print-progress-estimate"
+    "print-progress-estimate",
+    "preemption-bound"
   };
   return opts;
 }
@@ -109,6 +113,7 @@ void Configuration::assign_by_commandline(){
   transform_loop_unroll = cl_transform_loop_unroll;
   print_progress = cl_print_progress || cl_print_progress_estimate;
   print_progress_estimate = cl_print_progress_estimate;
+  preemption_bound = cl_preemption_bound;
 }
 
 void Configuration::check_commandline(){

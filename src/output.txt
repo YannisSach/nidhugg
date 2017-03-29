@@ -1,0 +1,10 @@
+Running 51 test cases...
+SC_test.cpp(110): error in "fib_simple_n2_sc": check DPORDriver_test::check_all_traces(res,expected,conf) failed
+SC_test.cpp(346): error in "Atomic_5": check DPORDriver_test::check_all_traces(res,expected,conf) failed
+SC_test.cpp(406): error in "Atomic_6": check DPORDriver_test::check_all_traces(res,expected,conf) failed
+SC_test.cpp(537): error in "Atomic_9": check res.trace_count == 90 failed
+SC_test.cpp(854): error in "Full_conflict_8": check DPORDriver_test::check_all_traces(res,expected,conf) failed
+SC_test.cpp(916): error in "Full_conflict_9": check DPORDriver_test::check_all_traces(res,expected,conf) failed
+SC_test.cpp(1296): error in "Condvar_4": check DPORDriver_test::check_all_traces(res,expected,conf) failed
+SC_test.cpp(1612): error in "Condvar_9": check DPORDriver_test::check_all_traces(res,expected,conf) failed
+SC_test2.cpp(101): error in "Thread_local_2": check DPORDriver_test::check_all_traces(res,expected,conf) failed

@@ -190,6 +190,7 @@ public:
    * nondeterministically execute in several alternative ways. The
    * number of ways is given in alt_count.
    */
+  virtual bool canRunThisInstruction() = 0;
   virtual void register_alternatives(int alt_count) = 0;
 };
 

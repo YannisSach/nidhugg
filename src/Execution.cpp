@@ -35,7 +35,7 @@
 #include "Interpreter.h"
 #include "Debug.h"
 #include "SigSegvHandler.h"
-
+#include <iostream>
 #include <llvm/ADT/APInt.h>
 #include <llvm/ADT/SmallString.h>
 #include <llvm/ADT/Statistic.h>
@@ -77,6 +77,7 @@
 #include <llvm/Support/MathExtras.h>
 #include <algorithm>
 #include <cmath>
+#include <iostream>
 using namespace llvm;
 
 //===----------------------------------------------------------------------===//
@@ -3075,6 +3076,10 @@ void Interpreter::callAssertFail(Function *F,
 //
 void Interpreter::callFunction(Function *F,
                                const std::vector<GenericValue> &ArgVals) {
+
+  // if(!TB.canRunThisInstruction()){
+     // return;
+  bool isVerifierAtomic = false;
   if(F->getName().str() == "pthread_create"){
     callPthreadCreate(F,ArgVals);
     return;
@@ -3142,7 +3147,8 @@ void Interpreter::callFunction(Function *F,
           ECStack()->back().Caller.arg_size() == ArgVals.size()) &&
          "Incorrect number of arguments passed into function call!");
 
-  if(F->getName().str().find("__VERIFIER_atomic_") == 0){
+  if(F->getName().str().find("__VERIFIER_atomic_") == 0 ){
+    isVerifierAtomic = true;
     TB.fence();
     if(AtomicFunctionCall < 0){
       AtomicFunctionCall = ECStack()->size();
@@ -3150,21 +3156,35 @@ void Interpreter::callFunction(Function *F,
   }
 
   // Make a new stack frame... and fill it in.
+   
+  //std::cout <<CurrentThread<< "Calling Function\n";
+
   ECStack()->push_back(ExecutionContext());
   ExecutionContext &StackFrame = ECStack()->back();
   StackFrame.CurFunction = F;
 
+  // if(!TB.canRunThisInstruction()){
+    // ECStack() -> pop_back();
+    // return;
+  // }
+
   // Special handling for external functions.
+  // std::cout <<"Before\n";
+  // std::cout << DryRun << "\n";
+  // std::cout<<F->isDeclaration() <<"\n";
+  // std::cout<<!conf.extfun_no_fence.count(F->getName().str()) << "\n";
+  // std::cout << "Madeit\n";
+  // std::cout << "Now" <<DryRun << "\n";
   if (F->isDeclaration()) {
     // Memory fence
+
     if(!conf.extfun_no_fence.count(F->getName().str())){
       TB.fence();
-    }
-    if(!conf.extfun_no_full_memory_conflict.count(F->getName().str())){
+    }    if(!conf.extfun_no_full_memory_conflict.count(F->getName().str())){
       TB.full_memory_conflict();
     }
 
-    if(DryRun){
+    if(DryRun){ 
       ECStack()->pop_back();
       return;
     }
@@ -3179,6 +3199,7 @@ void Interpreter::callFunction(Function *F,
     popStackAndReturnValueToCaller (F->getReturnType (), Result);
     return;
   }
+
 
   // Get pointers to first LLVM BB & Instruction in function.
   StackFrame.CurBB     = &F->front();
@@ -3198,6 +3219,11 @@ void Interpreter::callFunction(Function *F,
 
   // Handle varargs arguments...
   StackFrame.VarArgs.assign(ArgVals.begin()+i, ArgVals.end());
+
+if(!TB.canRunThisInstruction() && !isVerifierAtomic){ 
+      ECStack()->pop_back();
+      return;
+    }
 }
 
 /* Strip away whitespace from the beginning and end of s. */
@@ -3334,7 +3360,13 @@ void Interpreter::run() {
 
     // Interpret a single instruction & increment the "PC".
     ExecutionContext &SF = ECStack()->back();  // Current stack frame
-    Instruction &I = *SF.CurInst++;            // Increment before execute
+      // Instruction &I = *SF.CurInst++;
+    // for(int i=0; i< Threads.size(); i++)
+      // std::cout << Threads[i].ECStack.size();
+    // std::cout<< "\n";
+    Instruction &I = *SF.CurInst;
+    *SF.CurInst++;
+    // std::cout<<"StackSize:" << Threads.size() << "\n";
 
     if(isUnknownIntrinsic(I)){
       /* This instruction is intrinsic. It will be removed from the IR
@@ -3396,6 +3428,7 @@ void Interpreter::run() {
       DryRunMem.clear();
     }
   }
+  // std::cout << "Clearing Stack\n";
   CurrentThread = 0;
   clearAllStacks();
 }

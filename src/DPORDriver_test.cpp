@@ -43,6 +43,7 @@ namespace DPORDriver_test {
     static Configuration conf;
     conf.memory_model = Configuration::SC;
     conf.debug_collect_all_traces = true;
+    conf.preemption_bound = 6;
     return conf;
   }
 
