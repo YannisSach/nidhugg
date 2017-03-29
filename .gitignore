@@ -9,6 +9,8 @@ src/nidhugg
 src/nidhuggc
 src/unittest
 src/libnidhugg.a
+src/.tags
+src/.tags sorted by file
 tests
 Makefile
 Makefile.in
