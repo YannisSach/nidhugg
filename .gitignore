@@ -10,7 +10,7 @@ src/nidhuggc
 src/unittest
 src/libnidhugg.a
 src/.tags
-src/.tags sorted by file
+src/.tags_sorted_by_file
 tests
 Makefile
 Makefile.in
