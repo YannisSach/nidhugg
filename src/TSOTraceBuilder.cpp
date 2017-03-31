@@ -172,6 +172,7 @@ retry:
   }
 
   for(p = 0; p < sz; p += 2){ // Loop through real threads
+
     if(threads[p].available && !threads[p].sleeping &&
        (conf.max_search_depth < 0 || threads[p].clock[p] < conf.max_search_depth)){
       ++threads[p].clock[p];
@@ -184,8 +185,9 @@ retry:
         bound_cnt++;
       }
       if(conf.preemption_bound >=0 && bound_cnt > conf.preemption_bound && conf.more_branches) {
-        if(is_previous_available && p != previous_id)
+        if(is_previous_available && p != previous_id){
           bound_cnt--;
+        }
         --threads[p].clock[p];
         prefix.pop_back();
         continue;
@@ -194,6 +196,10 @@ retry:
       prefix[prefix_idx].current_cnt = bound_cnt;
       *aux = -1;
       // std::cout << prefix_idx << ":" << bound_cnt <<"Scheduled" << prefix[prefix_idx].iid.get_pid() << "\n";
+      for(unsigned q; q < sz; q+=2){
+        if(!threads[q].available)
+          prefix[prefix_idx].conservative_branches.insert(q);
+      }
       return true;
     }
   }
@@ -337,14 +343,17 @@ bool TSOTraceBuilder::reset(){
 
     evt.alt = br.alt;
     evt.branch = prefix[i].branch;
+    evt.conservative_branches = prefix[i].conservative_branches;
     evt.branch.erase(br);
     evt.sleep = prefix[i].sleep;
     if(br.pid != prefix[i].iid.get_pid()){
-      if(!bound_reset){
+      if(!br.is_conservative)
         evt.sleep.insert(prefix[i].iid.get_pid());
-      }else{
-        bound_reset = false;
-      }
+
+      evt.conservative_branches.insert(br.pid);
+      evt.conservative_branches.insert(prefix[i].iid.get_pid());
+      // std::cout<<"Branching using conservative branch\n";
+      
     } 
 
     evt.sleep_branch_trace_count =
@@ -675,7 +684,7 @@ void TSOTraceBuilder::mutex_lock(const ConstMRef &ml){
   }else{
     /* Register conflict with last preceding lock */
     if(!prefix[mutex.last_lock].clock.leq(curnode().clock)){
-      add_branch(mutex.last_lock,prefix_idx);
+      add_branch(mutex.last_lock,prefix_idx,false);
     }
     curnode().clock += prefix[mutex.last_access].clock;
     threads[ipid].clock += prefix[mutex.last_access].clock;
@@ -695,12 +704,12 @@ void TSOTraceBuilder::mutex_lock_fail(const ConstMRef &ml){
   Mutex &mutex = mutexes[ml.ref];
   assert(0 <= mutex.last_lock);
   if(!prefix[mutex.last_lock].clock.leq(curnode().clock)){
-    add_branch(mutex.last_lock,prefix_idx);
+    add_branch(mutex.last_lock,prefix_idx,false);
   }
 
   if(0 <= last_full_memory_conflict &&
      !prefix[last_full_memory_conflict].clock.leq(curnode().clock)){
-    add_branch(last_full_memory_conflict,prefix_idx);
+    add_branch(last_full_memory_conflict,prefix_idx,false);
   }
 }
 
@@ -1034,7 +1043,9 @@ VecSet<TSOTraceBuilder::IPid> TSOTraceBuilder::sleep_set_at(int i){
 
 void TSOTraceBuilder::see_events(const VecSet<int> &seen_accesses){// Finding I set or WI 
   /* Register new branches */
+  // std::cout << "See events for " << prefix[prefix_idx].iid.get_pid() << "\n";
   std::vector<int> branch;
+  std::vector<bool> is_conservative_branch;
   for(int i : seen_accesses){
     if(i < 0) continue;
     const VClock<IPid> &iclock = prefix[i].clock;
@@ -1047,6 +1058,7 @@ void TSOTraceBuilder::see_events(const VecSet<int> &seen_accesses){// Finding I 
                    })) continue;
     // std::cout<< "Adding backtrack to " << i << "\n";
     branch.push_back(i);
+    is_conservative_branch.push_back(false);
     int current_proc = prefix[i].iid.get_pid();
     int k;
     if(conf.preemption_bound >= 0 && conf.more_branches && conf.memory_model == Configuration::SC){
@@ -1058,11 +1070,12 @@ void TSOTraceBuilder::see_events(const VecSet<int> &seen_accesses){// Finding I 
         }
       }
       // if(false){
-      if(k > -1){
+      if(k > -1 && k+1!=i){
         assert(prefix_idx < prefix.size());
         // if(current_proc != prefix[k].iid.get_pid())
           branch.push_back(k+1);
-      // std::cout<< "Adding backtrack2 to " << k << "\n";
+          is_conservative_branch.push_back(true);
+          // std::cout<< "Adding backtrack2 to " << k+1 << "\n";
       } 
    }
      
@@ -1077,14 +1090,15 @@ void TSOTraceBuilder::see_events(const VecSet<int> &seen_accesses){// Finding I 
     threads[ipid].clock += prefix[i].clock;
   }
 
+  int index = 0; 
   for(int i : branch){
-    add_branch(i,prefix_idx);
+    add_branch(i,prefix_idx,is_conservative_branch[index++]);
   } 
 
 }
 
 
-void TSOTraceBuilder::add_branch(int i, int j){
+void TSOTraceBuilder::add_branch(int i, int j, bool is_conservative){
   assert(0 <= i);
   assert(i < j);
   assert(j <= prefix_idx);
@@ -1092,10 +1106,6 @@ void TSOTraceBuilder::add_branch(int i, int j){
   
 
   VecSet<IPid> isleep = sleep_set_at(i);
-  if(bound_reset){
-    bound_reset = false;
-    isleep = sleep_set_at(0);
-  }
   /* candidates is a map from IPid p to event index i such that the
    * IID (p,i) identifies an event between prefix[i] (exclusive) and
    * prefix[j] (inclusive) such that (p,i) does not happen-after any
@@ -1108,7 +1118,7 @@ void TSOTraceBuilder::add_branch(int i, int j){
 
 
   std::vector<int> candidates;
-  Branch cand = {-1,0};
+  Branch cand = {-1,0,is_conservative};
   const VClock<IPid> &iclock = prefix[i].clock;
   for(int k = i+1; k <= j; ++k){
     IPid p = prefix[k].iid.get_pid();
@@ -1137,6 +1147,12 @@ void TSOTraceBuilder::add_branch(int i, int j){
     if(isleep.count(cand.pid)){
       /* This candidate is already sleeping (has been considered) at
        * prefix[i]. */
+      return;
+    }
+
+    if(is_conservative && prefix[i].conservative_branches.count(cand.pid)){
+      /* This conservative branch has already been considered
+       */
       return;
     }
 

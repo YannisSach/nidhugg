@@ -1,0 +1,11 @@
+cd ./src &&	make test
+make[1]: Entering directory '/home/yannis/nidhugg/src'
+./unittest --report_level=short --log_level=warning --run_test='*'
+Running 534 test cases...
+SC_test.cpp(210): error in "Intrinsic_2": check res.trace_count == 1680 failed
+SC_test.cpp(537): error in "Atomic_9": check res.trace_count == 90 failed
+SC_test2.cpp(216): error in "Compiler_fence_dekker": check res.trace_count == 3 failed
+Unroll_test.cpp(225): error in "PHI_counter_1": check res.trace_count == tres.trace_count failed
+Makefile:1601: recipe for target 'test' failed
+make[1]: Leaving directory '/home/yannis/nidhugg/src'
+Makefile:860: recipe for target 'test' failed

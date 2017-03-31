@@ -198,7 +198,7 @@ DPORDriver::Result DPORDriver::run(){
     //Yannis
     TB->bound_cnt = 0;
     TB->bound_reset = false;
-    TB->hard_reset_allowed = 10;
+    TB->hard_reset_allowed = 0;
     TB->branches_rejected = 0;
     break;
   case Configuration::TSO:

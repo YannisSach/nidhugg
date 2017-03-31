@@ -50,6 +50,7 @@ public:
   int hard_reset_allowed;
   int branches_rejected;
   bool bound_blocked;
+  int last_pid_turned_unavailable;
 
   virtual ~TraceBuilder();
   /* Returns true iff the sleepset is currently empty. */

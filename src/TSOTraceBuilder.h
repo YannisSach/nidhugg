@@ -265,6 +265,7 @@ protected:
   public:
     IPid pid;
     int alt;
+    bool is_conservative;
     bool operator<(const Branch &b) const{
       return pid < b.pid || (pid == b.pid && alt < b.alt);
     };
@@ -333,6 +334,7 @@ protected:
     //Yannis
     int current_cnt;
     IPid spawned_thread;
+    VecSet<IPid> conservative_branches;
   };
 
   /* The fixed prefix of events in the current execution. This may be
@@ -383,7 +385,7 @@ protected:
   };
 
   std::string iid_string(const Event &evt) const;
-  void add_branch(int i, int j);
+  void add_branch(int i, int j, bool is_conservative);
   /* Add clocks and branches.
    *
    * All elements e in seen should either be indices into prefix, or
