@@ -79,10 +79,10 @@ static llvm::cl::list<std::string> cl_extfun_no_race("extfun-no-race",llvm::cl::
 static llvm::cl::opt<int> cl_preemption_bound("preemption-bound", llvm::cl::NotHidden,llvm::cl::init(-1), llvm::cl::value_desc("B"),
                                               llvm::cl::desc("Perform a preemption bounded search with bound B.\n"
                                                              "This will just reject branches that exceed the bound.\n"
-                                                             "Add --more-branches to let dpor add conservative branches\n"));
+                                                             "Add --more-branches to let dpor add conservative branches.\n"));
 
 static llvm::cl::opt<bool> cl_more_branches("more-branches", llvm::cl::NotHidden, 
-                                            llvm::cl::desc("This works only with preemption-bound flag set and adds conservative branches\n"));
+                                            llvm::cl::desc("This works only with preemption-bound flag set and adds conservative branches.\n"));
 
 const std::set<std::string> &Configuration::commandline_opts(){
   static std::set<std::string> opts = {

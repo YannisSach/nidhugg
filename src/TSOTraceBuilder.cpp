@@ -197,7 +197,7 @@ retry:
     }
   }
 
-  if(conf.preemption_bound >= 0){
+  if(conf.preemption_bound >= 0 && conf.more_branches){
 
 
     for(p = 0; p < sz; p++){
@@ -211,9 +211,9 @@ retry:
     }
     if(!nobody_available){
       // threads[0].available = true;
-    if(hard_reset_allowed <= 0){
-      return false;
-    }
+      if(hard_reset_allowed <= 0){
+        return false;
+      }
       // std::cout<< "Forced to wakeup at "<< prefix_idx << "...\n";
       hard_reset_allowed--;
       goto retry;
