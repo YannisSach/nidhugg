@@ -141,6 +141,7 @@ bool TSOTraceBuilder::schedule(int *proc, int *aux, int *alt, bool *dryrun){
  //  }
  //  std::cout<<"\n";
   if(conf.preemption_bound >=0 && bound_cnt > conf.preemption_bound){
+        bound_blocked = true;
         return false;
       } 
 
@@ -157,7 +158,7 @@ retry:
       if(is_previous_available && p != previous_id)
       {
         bound_cnt++;
-      }if(conf.preemption_bound >=0 && bound_cnt > conf.preemption_bound) {
+      }if(conf.preemption_bound >=0 && bound_cnt > conf.preemption_bound && conf.more_branches) {
         if(is_previous_available && p != previous_id)
           bound_cnt--;
         --threads[p].clock[p];
@@ -182,7 +183,7 @@ retry:
         // std::cout <<prefix_idx <<" " << p << " " << previous_id << "\n";
         bound_cnt++;
       }
-      if(conf.preemption_bound >=0 && bound_cnt > conf.preemption_bound) {
+      if(conf.preemption_bound >=0 && bound_cnt > conf.preemption_bound && conf.more_branches) {
         if(is_previous_available && p != previous_id)
           bound_cnt--;
         --threads[p].clock[p];
@@ -419,7 +420,8 @@ void TSOTraceBuilder::debug_print() const {
       llvm::dbgs() << threads[sleep_set[i]].cpid;
     }
     llvm::dbgs() << "}";
-    llvm::dbgs() << " BNDCNT:{" << prefix[i].current_cnt << "}";
+    if(conf.preemption_bound >=0)
+      llvm::dbgs() << " BNDCNT:{" << prefix[i].current_cnt << "}";
     // if(conf.preemption_bound >= 0){
     if(true){
       if(i>0){

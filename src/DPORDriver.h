@@ -63,7 +63,7 @@ public:
   class Result{
   public:
     /* Empty result */
-    Result() : trace_count(0), sleepset_blocked_trace_count(0), error_trace(0) {};
+    Result() : trace_count(0), sleepset_blocked_trace_count(0), error_trace(0), bound_blocked_cnt(0) {};
     ~Result(){
       if(all_traces.empty()){ // Otherwise error_trace also appears in all_traces.
         delete error_trace;
@@ -93,6 +93,7 @@ public:
      */
     std::vector<Trace*> all_traces;
     int branches_rejected;
+    int bound_blocked_cnt;
 
   };
 

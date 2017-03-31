@@ -200,20 +200,25 @@ DPORDriver::Result DPORDriver::run(){
     TB->bound_reset = false;
     TB->hard_reset_allowed = 10;
     TB->branches_rejected = 0;
+    TB->bound_blocked = false;
     break;
   case Configuration::TSO:
     TB = new TSOTraceBuilder(conf);
     TB->bound_cnt = 0;
     TB->bound_reset = false;
+    TB->bound_blocked = false;
     break;
   case Configuration::PSO:
     TB = new PSOTraceBuilder(conf);
+    TB->bound_blocked = false;
     break;
   case Configuration::ARM:
     TB = new ARMTraceBuilder(conf);
+    TB->bound_blocked = false;
     break;
   case Configuration::POWER:
     TB = new POWERTraceBuilder(conf);
+    TB->bound_blocked = false;
     break;
   case Configuration::MM_UNDEF:
     throw std::logic_error("DPORDriver: No memory model is specified.");
@@ -253,11 +258,16 @@ DPORDriver::Result DPORDriver::run(){
       res.all_traces.push_back(t);
       t_used = true;
     }
-    if(TB->sleepset_is_empty()){
+    assert(!TB->bound_blocked);
+    if(TB->sleepset_is_empty() && !TB->bound_blocked){
       ++res.trace_count;
-    }else{
+    }else if(!TB->sleepset_is_empty()){
       ++res.sleepset_blocked_trace_count;
-    }
+    }else {
+      assert(!TB.bound_blocked);
+      ++res.bound_blocked_cnt;
+      TB->bound_blocked = false;
+    } 
     ++computation_count;
     if(t && t->has_errors() && !res.has_errors()){
       res.error_trace = t;

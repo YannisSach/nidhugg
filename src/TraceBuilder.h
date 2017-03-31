@@ -49,6 +49,7 @@ public:
   bool bound_reset;
   int hard_reset_allowed;
   int branches_rejected;
+  bool bound_blocked;
 
   virtual ~TraceBuilder();
   /* Returns true iff the sleepset is currently empty. */
