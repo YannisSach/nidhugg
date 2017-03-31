@@ -20,6 +20,7 @@
 #include "TraceBuilder.h"
 
 TraceBuilder::TraceBuilder(const Configuration &C) : conf(C) {
+  bound_blocked = false;
 }
 
 TraceBuilder::~TraceBuilder(){

@@ -200,25 +200,20 @@ DPORDriver::Result DPORDriver::run(){
     TB->bound_reset = false;
     TB->hard_reset_allowed = 10;
     TB->branches_rejected = 0;
-    TB->bound_blocked = false;
     break;
   case Configuration::TSO:
     TB = new TSOTraceBuilder(conf);
     TB->bound_cnt = 0;
     TB->bound_reset = false;
-    TB->bound_blocked = false;
     break;
   case Configuration::PSO:
     TB = new PSOTraceBuilder(conf);
-    TB->bound_blocked = false;
     break;
   case Configuration::ARM:
     TB = new ARMTraceBuilder(conf);
-    TB->bound_blocked = false;
     break;
   case Configuration::POWER:
     TB = new POWERTraceBuilder(conf);
-    TB->bound_blocked = false;
     break;
   case Configuration::MM_UNDEF:
     throw std::logic_error("DPORDriver: No memory model is specified.");
