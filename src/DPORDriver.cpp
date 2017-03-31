@@ -199,6 +199,7 @@ DPORDriver::Result DPORDriver::run(){
     TB->bound_cnt = 0;
     TB->bound_reset = false;
     TB->hard_reset_allowed = 10;
+    TB->branches_rejected = 0;
     break;
   case Configuration::TSO:
     TB = new TSOTraceBuilder(conf);
@@ -271,6 +272,8 @@ DPORDriver::Result DPORDriver::run(){
       estimate = TB->estimate_trace_count();
     }
   }while(TB->reset());
+  
+  res.branches_rejected = TB->branches_rejected;
 
   if(conf.print_progress){
     llvm::dbgs() << "\n";

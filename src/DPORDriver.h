@@ -92,6 +92,8 @@ public:
      * intended usage.
      */
     std::vector<Trace*> all_traces;
+    int branches_rejected;
+
   };
 
   /* Explore the traces of the given module, and return the result.

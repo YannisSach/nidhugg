@@ -120,7 +120,7 @@ bool TSOTraceBuilder::schedule(int *proc, int *aux, int *alt, bool *dryrun){
   // std::cout << "Scheduling :" << prefix_idx << "\n"; 
   // if(prefix_idx)
   // std::cout << "Previous was :" << prefix[prefix_idx-1].iid.get_pid() << "\n";
-  int previous_id = prefix_idx ? prefix[prefix_idx - 1].iid.get_pid() : 0;
+  unsigned previous_id = prefix_idx ? prefix[prefix_idx - 1].iid.get_pid() : 0;
   bool is_previous_available = threads.size() > previous_id && prefix_idx ? threads[previous_id].available : false ;
   // if(is_previous_available)
     // std::cout<<prefix_idx<<" Available:"<<previous_id<<" "<<threads[previous_id].available << " \n";
@@ -1047,7 +1047,7 @@ void TSOTraceBuilder::see_events(const VecSet<int> &seen_accesses){// Finding I 
     branch.push_back(i);
     int current_proc = prefix[i].iid.get_pid();
     int k;
-    if(conf.preemption_bound >= 0 && conf.memory_model == Configuration::SC){
+    if(conf.preemption_bound >= 0 && conf.more_branches && conf.memory_model == Configuration::SC){
     // if(false){
       for(k = i-1; k>=0 && current_proc == prefix[k].iid.get_pid();   k--){
         if(prefix[k].spawned_thread == prefix[prefix_idx].iid.get_pid()){
@@ -1087,6 +1087,8 @@ void TSOTraceBuilder::add_branch(int i, int j){
   assert(i < j);
   assert(j <= prefix_idx);
 
+  
+
   VecSet<IPid> isleep = sleep_set_at(i);
   if(bound_reset){
     bound_reset = false;
@@ -1101,6 +1103,8 @@ void TSOTraceBuilder::add_branch(int i, int j){
    * If no such event has yet been found for a thread p, then
    * candidates[p] is out of bounds, or has the value -1.
    */
+
+
   std::vector<int> candidates;
   Branch cand = {-1,0};
   const VClock<IPid> &iclock = prefix[i].clock;
@@ -1134,6 +1138,14 @@ void TSOTraceBuilder::add_branch(int i, int j){
       return;
     }
 
+  }
+
+  if(i > 0 && conf.preemption_bound >=0){
+    bool interrupting_someone = prefix[i].iid.get_pid() == prefix[i-1].iid.get_pid();
+    if(interrupting_someone && prefix[i].current_cnt == conf.preemption_bound){
+      branches_rejected++;
+      return;
+    }
   }
 
   assert(0 <= cand.pid);

@@ -101,7 +101,8 @@ int main(int argc, char *argv[]){
       DPORDriver::Result res = driver->run();
       std::cout << "Trace count: " << res.trace_count
                 << " (also " << res.sleepset_blocked_trace_count
-                << " sleepset blocked)" << std::endl;
+                << " sleepset blocked and " 
+                << res.branches_rejected << " branches were rejected due to the bound) " << std::endl;
       if(res.has_errors()){
         errors_detected = true;
         std::cout << "\n Error detected:\n"

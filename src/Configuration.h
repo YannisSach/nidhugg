@@ -75,6 +75,7 @@ public:
       "__assert_fail",
       "atexit"
     };
+
     check_robustness = false;
     ee_store_trace = false;
     debug_collect_all_traces = false;
@@ -85,6 +86,7 @@ public:
     print_progress = false;
     print_progress_estimate = false;
     preemption_bound = -1;
+    more_branches = false;
   };
   /* Read the switches given to the program by the user. Assign
    * configuration options accordingly.
@@ -175,10 +177,14 @@ public:
    */
   bool print_progress_estimate;
 
-  /* Perfomre a preemption bounded search.
+  /* Perform a preemption bounded search.
    */
 
   int preemption_bound;
+
+  /* Add conservative branches
+   */
+  bool more_branches;
 
   /* The set of all commandline switches that are associated with
    * setting configuration options. This set has nothing to do with
