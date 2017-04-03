@@ -266,9 +266,19 @@ protected:
     IPid pid;
     int alt;
     bool is_conservative;
+    // bool operator<(const Branch &b) const{
+      // return (is_conservative && !b.is_conservative)  || pid < b.pid || (pid == b.pid && alt < b.alt);
+      // return pid < b.pid || (pid == b.pid && alt < b.alt);
+    // };
+
     bool operator<(const Branch &b) const{
+      // if (is_conservative && !b.is_conservative)
+        // return true;
+      // if (!is_conservative && b.is_conservative)
+        // return false;
       return pid < b.pid || (pid == b.pid && alt < b.alt);
-    };
+    }
+
     bool operator==(const Branch &b) const{
       return pid == b.pid && alt == b.alt;
     };

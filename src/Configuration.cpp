@@ -76,13 +76,22 @@ static llvm::cl::list<std::string> cl_extfun_no_race("extfun-no-race",llvm::cl::
                                                                         "does not participate in any races. (See manual.)\n"
                                                                         "May be given multiple times."));
 
-static llvm::cl::opt<int> cl_preemption_bound("preemption-bound", llvm::cl::NotHidden,llvm::cl::init(-1), llvm::cl::value_desc("B"),
+static llvm::cl::opt<int> cl_preemption_bound("bound", llvm::cl::NotHidden,llvm::cl::init(-1), llvm::cl::value_desc("B"),
                                               llvm::cl::desc("Perform a preemption bounded search with bound B.\n"
-                                                             "This will just reject branches that exceed the bound.\n"
-                                                             "Add --more-branches to let dpor add conservative branches.\n"));
+                                                             "This will just reject branches that exceed the bound using simple preemption method.\n"
+                                                             "Define bounding method using preemption-bounding. \n"));
 
-static llvm::cl::opt<bool> cl_more_branches("more-branches", llvm::cl::NotHidden, 
-                                            llvm::cl::desc("This works only with preemption-bound flag set and adds conservative branches.\n"));
+/* Pick preemption bounding options
+ */
+
+static llvm::cl::opt<Configuration::PreemptionMethod> cl_preem_meth("preemption-bounding", 
+                                                                    llvm::cl::NotHidden,
+                                                                    llvm::cl::desc("Pick a preemtpion bounding method simple or bpor (simple by default)."),
+                                                                    llvm::cl::init(Configuration::SIMPLE),
+                                                                    llvm::cl::value_desc("METHOD"),
+                                                                    llvm::cl::values(clEnumValN(Configuration::SIMPLE,"S","SIMPLE"),
+                                                                                     clEnumValN(Configuration::BPOR, "B", "BPOR"),
+                                                                                     clEnumValEnd));
 
 const std::set<std::string> &Configuration::commandline_opts(){
   static std::set<std::string> opts = {
@@ -97,8 +106,8 @@ const std::set<std::string> &Configuration::commandline_opts(){
     "unroll",
     "print-progress",
     "print-progress-estimate",
-    "preemption-bound",
-    "more-branches"
+    "bound",
+    "preemption-bounding"
   };
   return opts;
 }
@@ -120,7 +129,7 @@ void Configuration::assign_by_commandline(){
   print_progress = cl_print_progress || cl_print_progress_estimate;
   print_progress_estimate = cl_print_progress_estimate;
   preemption_bound = cl_preemption_bound;
-  more_branches = cl_more_branches;
+  preem_method = cl_preem_meth;
 }
 
 void Configuration::check_commandline(){

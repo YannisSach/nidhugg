@@ -158,7 +158,8 @@ retry:
       if(is_previous_available && p != previous_id)
       {
         bound_cnt++;
-      }if(conf.preemption_bound >=0 && bound_cnt > conf.preemption_bound && conf.more_branches) {
+      }
+      if(conf.preemption_bound >=0 && bound_cnt > conf.preemption_bound && conf.preem_method == Configuration::BPOR) {
         if(is_previous_available && p != previous_id)
           bound_cnt--;
         --threads[p].clock[p];
@@ -184,7 +185,7 @@ retry:
         // std::cout <<prefix_idx <<" " << p << " " << previous_id << "\n";
         bound_cnt++;
       }
-      if(conf.preemption_bound >=0 && bound_cnt > conf.preemption_bound && conf.more_branches) {
+      if(conf.preemption_bound >=0 && bound_cnt > conf.preemption_bound && conf.preem_method == Configuration::BPOR) {
         if(is_previous_available && p != previous_id){
           bound_cnt--;
         }
@@ -196,6 +197,9 @@ retry:
       prefix[prefix_idx].current_cnt = bound_cnt;
       *aux = -1;
       // std::cout << prefix_idx << ":" << bound_cnt <<"Scheduled" << prefix[prefix_idx].iid.get_pid() << "\n";
+
+      /* Lets put all unavailable threads to the conservative set;
+       */
       for(unsigned q; q < sz; q+=2){
         if(!threads[q].available)
           prefix[prefix_idx].conservative_branches.insert(q);
@@ -204,7 +208,7 @@ retry:
     }
   }
 
-  if(conf.preemption_bound >= 0 && conf.more_branches){
+  if(false && conf.preemption_bound >= 0 && conf.preem_method == Configuration::BPOR){
 
 
     for(p = 0; p < sz; p++){
@@ -302,8 +306,16 @@ bool TSOTraceBuilder::reset(){
     llvm::dbgs() << " =============================\n";
   }
 
+find_next_branch:
   int i;
   for(i = int(prefix.size())-1; 0 <= i; --i){
+    /* Lets find out which treads where alive where the branch happened
+     * Assume that all threads were unavailable. 
+     * At the position i if the bound count was increased then the thread at the position i-1 was available
+     * Also if a thread was scheduled at the posotion i then it was available at the position i-1
+     * It would be enough to do this only when a branch is found.
+     */
+
     if( i > 0){
       threads[prefix[i-1].iid.get_pid()].available = false;
       if(prefix[i].current_cnt > prefix[i-1].current_cnt ||
@@ -312,10 +324,13 @@ bool TSOTraceBuilder::reset(){
         // std::cout << prefix[i-1].iid.get_pid() << " became available\n";
       }
     }
+
     if(prefix[i].branch.size()){
+      // std::cout << "Reseting to " << i << "\n";
       break;
     }
   }
+
   if(i < 0){
     /* No more branching is possible. */
     return false;
@@ -323,7 +338,27 @@ bool TSOTraceBuilder::reset(){
 
   /* Setup the new Event at prefix[i] */
   {
-    Branch br = prefix[i].branch[0];
+next_branch:
+int k;
+  Branch br = prefix[i].branch[0];
+
+if(conf.preemption_bound == Configuration::BPOR){
+  if(!br.is_conservative){
+    for( k = i-1; k >=0 ; k--){
+      if(prefix[k].branch.size())
+        break;
+    }
+    if(k>=0){
+      int idx = prefix[k].branch.find(br);
+      if(idx >=0 && prefix[k].branch[idx].is_conservative){
+        prefix[i].branch.erase(br);
+        if(prefix[i].branch.size())
+          goto next_branch;
+        else goto find_next_branch;
+      }
+    }
+  }
+}
 
     /* Find the index of br.pid. */
     int br_idx = 1;
@@ -352,7 +387,6 @@ bool TSOTraceBuilder::reset(){
 
       evt.conservative_branches.insert(br.pid);
       evt.conservative_branches.insert(prefix[i].iid.get_pid());
-      // std::cout<<"Branching using conservative branch\n";
       
     } 
 
@@ -430,18 +464,20 @@ void TSOTraceBuilder::debug_print() const {
     }
     llvm::dbgs() << "}";
     if(conf.preemption_bound >=0)
-      llvm::dbgs() << " BNDCNT:{" << prefix[i].current_cnt << "}";
-    // if(conf.preemption_bound >= 0){
-    if(true){
-      if(i>0){
-        if(prefix[i].current_cnt < prefix[i-1].current_cnt)
-          llvm::dbgs() << "\nThis trace exceeded the bound limit\n";
+      llvm::dbgs() << " BC:{" << prefix[i].current_cnt << "}";
+    if(conf.preem_method == Configuration::BPOR){
+      llvm::dbgs() << " CS:{";
+      for(int j = 0; j < prefix[i].conservative_branches.size(); j++){
+        if(j != 0 ) llvm::dbgs() << ", ";
+        llvm::dbgs() << prefix[i].conservative_branches[j];
       }
+      llvm::dbgs() << "}";
     }
+
     if(prefix[i].branch.size()){
       llvm::dbgs() << " branch: ";
       for(Branch b : prefix[i].branch){
-        llvm::dbgs() << threads[b.pid].cpid;
+        llvm::dbgs() << threads[b.pid].cpid << "("  << b.is_conservative <<")";
         if(b.alt != 0){
           llvm::dbgs() << "-alt:" << b.alt;
         }
@@ -1061,7 +1097,12 @@ void TSOTraceBuilder::see_events(const VecSet<int> &seen_accesses){// Finding I 
     is_conservative_branch.push_back(false);
     int current_proc = prefix[i].iid.get_pid();
     int k;
-    if(conf.preemption_bound >= 0 && conf.more_branches && conf.memory_model == Configuration::SC){
+
+    /* Try to add a branch at the beginning of the thread block where the colision happens
+     * Take thread at prefix_idx was alive back there
+     */
+
+    if(conf.preemption_bound >= 0 && conf.preem_method ==Configuration::BPOR && conf.memory_model == Configuration::SC){
     // if(false){
       for(k = i-1; k>=0 && current_proc == prefix[k].iid.get_pid();   k--){
         if(prefix[k].spawned_thread == prefix[prefix_idx].iid.get_pid()){
@@ -1069,7 +1110,6 @@ void TSOTraceBuilder::see_events(const VecSet<int> &seen_accesses){// Finding I 
           break;
         }
       }
-      // if(false){
       if(k > -1 && k+1!=i){
         assert(prefix_idx < prefix.size());
         // if(current_proc != prefix[k].iid.get_pid())
@@ -1140,8 +1180,16 @@ void TSOTraceBuilder::add_branch(int i, int j, bool is_conservative){
     }
     candidates[p] = prefix[k].iid.get_index();
     cand.pid = p;
-    if(prefix[i].branch.count(cand)){
+
+    if(prefix[i].branch.count(cand)){ //|| prefix[i].branch.count({cand.pid,cand.alt,!(cand.is_conservative)})){
       /* There is already a satisfactory candidate branch */
+       int bid = prefix[i].branch.find(cand);
+
+       if(prefix[i].branch[bid].is_conservative){
+         if(cand.is_conservative && !is_conservative){
+           prefix[i].branch.insert(cand);
+         }
+       }
       return;
     }
     if(isleep.count(cand.pid)){
@@ -1150,8 +1198,8 @@ void TSOTraceBuilder::add_branch(int i, int j, bool is_conservative){
       return;
     }
 
-    if(is_conservative && prefix[i].conservative_branches.count(cand.pid)){
-      /* This conservative branch has already been considered
+    if(prefix[i].conservative_branches.count(cand.pid)){ // Should i check for conservativity???
+      /* This branch has already been considered
        */
       return;
     }

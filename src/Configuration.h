@@ -42,6 +42,12 @@ public:
     PSO,
     TSO
   };
+
+  enum PreemptionMethod{
+    SIMPLE,
+    BPOR
+  };
+
   /* Assign default values to all configuration parameters. */
   Configuration(){
     explore_all_traces = false;
@@ -86,7 +92,7 @@ public:
     print_progress = false;
     print_progress_estimate = false;
     preemption_bound = -1;
-    more_branches = false;
+    preem_method = PreemptionMethod::SIMPLE;
   };
   /* Read the switches given to the program by the user. Assign
    * configuration options accordingly.
@@ -184,7 +190,7 @@ public:
 
   /* Add conservative branches
    */
-  bool more_branches;
+  PreemptionMethod preem_method;
 
   /* The set of all commandline switches that are associated with
    * setting configuration options. This set has nothing to do with

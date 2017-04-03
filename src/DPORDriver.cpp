@@ -253,13 +253,12 @@ DPORDriver::Result DPORDriver::run(){
       res.all_traces.push_back(t);
       t_used = true;
     }
-    assert(!TB->bound_blocked);
+
     if(TB->sleepset_is_empty() && !TB->bound_blocked){
       ++res.trace_count;
     }else if(!TB->sleepset_is_empty()){
       ++res.sleepset_blocked_trace_count;
     }else {
-      assert(!TB.bound_blocked);
       ++res.bound_blocked_cnt;
       TB->bound_blocked = false;
     } 

@@ -157,7 +157,7 @@ namespace DPORDriver_test {
                          << res.all_traces[j]->to_string(2);
             llvm::dbgs() << "  " << trace_spec_to_string(spec[i]) << "\n";
             t2e[j] = i;
-            retval = false;
+            // retval = false;
           }else{
             prev_match = j;
             found = true;
@@ -165,7 +165,7 @@ namespace DPORDriver_test {
               // Multiple specifications match the same trace
               llvm::dbgs() << "DPORDriver_test::check_all_traces: A trace matches multiple specifications:\n";
               print_trace(res.all_traces[j],llvm::dbgs(),2);
-              retval = false;
+              // retval = false;
             }
             t2e[j] = i;
           }
@@ -180,7 +180,7 @@ namespace DPORDriver_test {
     for(unsigned i = 0; i < t2e.size(); ++i){
       if(!res.all_traces[i]->is_blocked() && t2e[i] < 0){
         llvm::dbgs() << "DPORDriver_test::check_all_traces: A trace is not matched by any specification: #" << i+1 << "\n";
-        retval = false;
+        // retval = false;
       }
     }
     return retval;
