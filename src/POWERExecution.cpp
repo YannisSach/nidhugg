@@ -2448,7 +2448,7 @@ void POWERInterpreter::callFunction(llvm::Function *F,
     Result.IntVal = llvm::APInt(F->getReturnType()->getIntegerBitWidth(),0);
     setCurInstrValue(Result);
     return;
-  }else if(F->getName().str() == "putchar"){
+  }else if(F->getName().str() == "putcharhar"){
     callPutchar(F);
     return;
   }else if(F->getName().str() == "__VERIFIER_assume"){

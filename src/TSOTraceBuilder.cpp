@@ -172,6 +172,21 @@ retry:
     }
   }
 
+  if(prefix_idx>0){//&& conf.preemption_bound >=0 && conf.preem_method == Configuration::BPOR){
+    p = prefix[prefix_idx-1].iid.get_pid();
+    if(threads[p].available && !threads[p].sleeping &&
+       (conf.max_search_depth < 0 || threads[p].clock[p] < conf.max_search_depth)){
+      ++threads[p].clock[p];
+      prefix.push_back(Event(IID<IPid>(IPid(p),threads[p].clock[p]),
+                             threads[p].clock));
+      prefix[prefix_idx].current_cnt = bound_cnt;
+      *proc = p/2;
+      *aux = -1;
+      return true;
+    } 
+  }
+
+
   for(p = 0; p < sz; p += 2){ // Loop through real threads
 
     if(threads[p].available && !threads[p].sleeping &&
@@ -340,9 +355,9 @@ find_next_branch:
   {
 next_branch:
 int k;
-  Branch br = prefix[i].branch[0];
+Branch br = prefix[i].branch[0];
 
-if(conf.preemption_bound == Configuration::BPOR){
+if(false && conf.preemption_bound == Configuration::BPOR){
   if(!br.is_conservative){
     for( k = i-1; k >=0 ; k--){
       if(prefix[k].branch.size())
@@ -382,7 +397,7 @@ if(conf.preemption_bound == Configuration::BPOR){
     evt.branch.erase(br);
     evt.sleep = prefix[i].sleep;
     if(br.pid != prefix[i].iid.get_pid()){
-      if(!br.is_conservative)
+      if(conf.preemption_bound < 0 || !br.is_conservative)
         evt.sleep.insert(prefix[i].iid.get_pid());
 
       evt.conservative_branches.insert(br.pid);
@@ -1198,11 +1213,18 @@ void TSOTraceBuilder::add_branch(int i, int j, bool is_conservative){
       return;
     }
 
-    if(prefix[i].conservative_branches.count(cand.pid)){ // Should i check for conservativity???
+    if(conf.preem_method == Configuration::BPOR){
+      if(prefix[i].conservative_branches.count(cand.pid)){ // Should i check for conservativity???
       /* This branch has already been considered
        */
       return;
     }
+
+      if(false && i && prefix[i-1].branch.count(cand)){
+        prefix[i].conservative_branches.insert(cand.pid);
+        return;
+      }
+  }
 
   }
 
@@ -1216,7 +1238,15 @@ void TSOTraceBuilder::add_branch(int i, int j, bool is_conservative){
 
   assert(0 <= cand.pid);
   // std::cout << "New candidate added \n";
+
   prefix[i].branch.insert(cand);
+
+  //Since a conservative branch is added lets remove it from above
+  // if(cand.is_conservative){
+  //   if(i>0){
+  //     prefix[i-1].branch.erase(cand);
+  //   }
+  // }
 }
 
 bool TSOTraceBuilder::has_pending_store(IPid pid, void const *ml) const {

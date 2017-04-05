@@ -337,12 +337,12 @@ exit:
   /************************
    *        puts          *
    ************************/
-  /* Figure out signature of putchar */
-  std::string putchar_ret_ty = "i32";
-  std::string putchar_arg_ty = "i32";
-  std::string putchar_decl = "declare i32 @putchar(i32)";
+  /* Figure out signature of putcharhar */
+  std::string putcharhar_ret_ty = "i32";
+  std::string putcharhar_arg_ty = "i32";
+  std::string putcharhar_decl = "declare i32 @putcharhar(i32)";
   std::string print_newline =
-    "call "+putchar_ret_ty+" @putchar("+putchar_arg_ty+" 10)";
+    "call "+putcharhar_ret_ty+" @putcharhar("+putcharhar_arg_ty+" 10)";
   /* Define puts */
   optAddFunction(M,"puts",{
       R"(
@@ -356,15 +356,15 @@ head:
   %cc = icmp eq i8 %c, 0
   br i1 %cc, label %exit, label %body
 body:
-  %ca = zext i8 %c to )"+putchar_arg_ty+R"(
-  call )"+putchar_ret_ty+R"( @putchar()"+putchar_arg_ty+R"( %ca)
+  %ca = zext i8 %c to )"+putcharhar_arg_ty+R"(
+  call )"+putcharhar_ret_ty+R"( @putcharhar()"+putcharhar_arg_ty+R"( %ca)
   %inext = add i32 %i, 1
   br label %head
 exit:
   )"+print_newline+R"(
   ret i32 1
 }
-)"+putchar_decl+"\n",
+)"+putcharhar_decl+"\n",
       R"(
 define i64 @puts(i8* %s){
 entry:
@@ -376,15 +376,15 @@ head:
   %cc = icmp eq i8 %c, 0
   br i1 %cc, label %exit, label %body
 body:
-  %ca = zext i8 %c to )"+putchar_arg_ty+R"(
-  call )"+putchar_ret_ty+R"( @putchar()"+putchar_arg_ty+R"( %ca)
+  %ca = zext i8 %c to )"+putcharhar_arg_ty+R"(
+  call )"+putcharhar_ret_ty+R"( @putcharhar()"+putcharhar_arg_ty+R"( %ca)
   %inext = add i32 %i, 1
   br label %head
 exit:
   )"+print_newline+R"(
   ret i64 1
 }
-)"+putchar_decl+"\n"});
+)"+putcharhar_decl+"\n"});
   return true;
 }
 

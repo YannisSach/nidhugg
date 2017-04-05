@@ -44,7 +44,7 @@ namespace DPORDriver_test {
     conf.memory_model = Configuration::SC;
     conf.debug_collect_all_traces = true;
     conf.preemption_bound = 10;
-    conf.more_branches = true;
+    conf.preem_method = Configuration::BPOR;
     return conf;
   }
 
