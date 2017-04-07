@@ -32,6 +32,8 @@
 
 namespace DPORDriver_test {
 
+  bool only_specs_match = false; 
+
   const Configuration &get_tso_conf(){
     static Configuration conf;
     conf.memory_model = Configuration::TSO;
@@ -43,7 +45,8 @@ namespace DPORDriver_test {
     static Configuration conf;
     conf.memory_model = Configuration::SC;
     conf.debug_collect_all_traces = true;
-    conf.preemption_bound = 10;
+    only_specs_match = true;
+    conf.preemption_bound = 10; 
     conf.preem_method = Configuration::BPOR;
     return conf;
   }
@@ -135,7 +138,8 @@ namespace DPORDriver_test {
                    << spec.size() << ", actual number: "
                    << res.trace_count
                    << " (" << res.all_traces.size() << ")\n";
-      // retval = false;
+      if(!only_specs_match)
+        retval = false;
     }
     std::vector<int> t2e(res.all_traces.size(),-1);
     for(unsigned i = 0; i < spec.size(); ++i){
@@ -157,7 +161,8 @@ namespace DPORDriver_test {
                          << res.all_traces[j]->to_string(2);
             llvm::dbgs() << "  " << trace_spec_to_string(spec[i]) << "\n";
             t2e[j] = i;
-            // retval = false;
+            if(!only_specs_match)
+              retval = false;
           }else{
             prev_match = j;
             found = true;
@@ -165,7 +170,8 @@ namespace DPORDriver_test {
               // Multiple specifications match the same trace
               llvm::dbgs() << "DPORDriver_test::check_all_traces: A trace matches multiple specifications:\n";
               print_trace(res.all_traces[j],llvm::dbgs(),2);
-              // retval = false;
+              if(!only_specs_match)
+                retval = false;
             }
             t2e[j] = i;
           }
@@ -180,7 +186,8 @@ namespace DPORDriver_test {
     for(unsigned i = 0; i < t2e.size(); ++i){
       if(!res.all_traces[i]->is_blocked() && t2e[i] < 0){
         llvm::dbgs() << "DPORDriver_test::check_all_traces: A trace is not matched by any specification: #" << i+1 << "\n";
-        // retval = false;
+        if(!only_specs_match)
+          retval = false;
       }
     }
     return retval;
