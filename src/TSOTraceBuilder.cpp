@@ -159,7 +159,7 @@ retry:
 
   //Prioritize running thread
 
-  if(prefix_idx>0){//&& conf.preemption_bound >=0 && conf.preem_method == Configuration::BPOR){
+  if(prefix_idx>0 && conf.preemption_bound >=0 && conf.preem_method == Configuration::BPOR){
     p = prefix[prefix_idx-1].iid.get_pid();
     if(threads[p].available && !threads[p].sleeping &&
        (conf.max_search_depth < 0 || threads[p].clock[p] < conf.max_search_depth)){
@@ -358,9 +358,11 @@ Branch br = prefix[i].branch[0];
  * There are logic errors here not fixed because this optimization didn't reduce the trace count.
  */
 
-if(false && conf.preemption_bound == Configuration::BPOR){
+if(false && conf.preem_method == Configuration::BPOR){
+  int current_proc = prefix[i].iid.get_pid();
   if(!br.is_conservative){
-    for( k = i-1; k >=0 ; k--){
+    // std::cout << "Not Conservative\n";
+    for( k = i-1; k >=0 && current_proc == prefix[k].iid.get_pid(); k--){
       if(prefix[k].branch.size())
         break;
     }
@@ -1109,7 +1111,9 @@ void TSOTraceBuilder::see_events(const VecSet<int> &seen_accesses){// Finding I 
   /* Register new branches */
   std::vector<int> branch;
   std::vector<bool> is_conservative_branch;
+  int idx_seen_accesses = -1;
   for(int i : seen_accesses){
+    idx_seen_accesses++;
     if(i < 0) continue;
     const VClock<IPid> &iclock = prefix[i].clock;
     // This event happens before current event
@@ -1133,20 +1137,34 @@ void TSOTraceBuilder::see_events(const VecSet<int> &seen_accesses){// Finding I 
 
     if(conf.preemption_bound >= 0 && conf.preem_method ==Configuration::BPOR && conf.memory_model == Configuration::SC){
     // if(false){
+      bool broken = false;
       for(k = i-1; k>=0 && current_proc == prefix[k].iid.get_pid();   k--){
         if(prefix[k].spawned_thread == prefix[prefix_idx].iid.get_pid()){
+          broken = true;
+          break;
+        }
+        if(idx_seen_accesses && seen_accesses[idx_seen_accesses-1] == k){
+          broken = true;
           break;
         }
       }
 
+      if(broken)
+        continue;
+
       /* Add conservative branches to branch.
        */
 
-      if(k > -1 && k+1!=i){
+      // Try to add either conservative or not conservative traces
+      if(k > -1 && k+1!=i && current_proc != prefix[k].iid.get_pid()){ // && !prefix[k+1].conservative_branches.count(current_proc)){
+      // if(k > -1 && k+1!=i && current_proc != prefix[k].iid.get_pid() && !prefix[k+1].conservative_branches.count(current_proc)
+         // && seen_accesses[idx_seen_accesses-1] <= k){
         assert(prefix_idx < prefix.size());
         // if(current_proc != prefix[k].iid.get_pid())
-          branch.push_back(k+1);
-          is_conservative_branch.push_back(true);
+          // branch[branch.size()-1] = k+1;
+          // is_conservative_branch[is_conservative_branch.size()-1] = true;
+           branch.push_back(k+1);
+           is_conservative_branch.push_back(true);
           // std::cout<< "Adding backtrack2 to " << k+1 << "\n";
       } 
    }
@@ -1188,6 +1206,8 @@ void TSOTraceBuilder::add_branch(int i, int j, bool is_conservative){
    * candidates[p] is out of bounds, or has the value -1.
    */
 
+  // Don't add conservative branch if there is already a branch
+  // if(is_conservative && prefix[i].branch.size()) return;
 
   std::vector<int> candidates;
   Branch cand = {-1,0,is_conservative};
