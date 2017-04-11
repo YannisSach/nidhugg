@@ -97,9 +97,20 @@ bool TSOTraceBuilder::schedule(int *proc, int *aux, int *alt, bool *dryrun){
     assert(prefix[prefix.size()-1].branch.empty());
     assert(prefix[prefix.size()-1].wakeup.empty());
     ++prefix[prefix.size()-2].size;
-    prefix[prefix.size()-2].spawned_thread = prefix[prefix.size()-1].spawned_thread;
     prefix.pop_back();
     --prefix_idx;
+  }
+
+  /* Before we schedule the new event. We should store the non available threads at this event.
+   * This is important when adding conservative backtracking points.
+   */
+  if(prefix_idx > 0){
+    for(unsigned k = 0; k < threads.size(); k++){
+      if(!threads[k].available){
+        prefix[prefix_idx-1].unavailable_threads.insert(k);
+      }
+    }
+    prefix[prefix_idx-1].unavailable_threads.insert(threads.size());
   }
 
   /* Create a new Event */
@@ -158,8 +169,8 @@ retry:
   }
 
   //Prioritize running thread
-
   if(prefix_idx>0 && conf.preemption_bound >=0 && conf.preem_method == Configuration::BPOR){
+  // if(conf.preemption_bound >=0 && conf.preem_method == Configuration::BPOR){
     p = prefix[prefix_idx-1].iid.get_pid();
     if(threads[p].available && !threads[p].sleeping &&
        (conf.max_search_depth < 0 || threads[p].clock[p] < conf.max_search_depth)){
@@ -534,7 +545,6 @@ void TSOTraceBuilder::spawn(){
   threads.push_back(Thread(child_cpid,threads[parent_ipid].clock));
   threads.push_back(Thread(CPS.new_aux(child_cpid),threads[parent_ipid].clock));
   threads.back().available = false; // Empty store buffer
-  curnode().spawned_thread = threads.size() - 2;
 }
 
 void TSOTraceBuilder::store(const ConstMRef &ml){
@@ -1134,21 +1144,15 @@ void TSOTraceBuilder::see_events(const VecSet<int> &seen_accesses){// Finding I 
     /* Try to add a branch at the beginning of the thread block where the collision happens.
      * The thread put to branch should be available (or just exist) at the beggining of the block.
      */
-
     if(conf.preemption_bound >= 0 && conf.preem_method ==Configuration::BPOR && conf.memory_model == Configuration::SC){
     // if(false){
       bool broken = false;
       for(k = i-1; k>=0 && current_proc == prefix[k].iid.get_pid();   k--){
-        if(prefix[k].spawned_thread == prefix[prefix_idx].iid.get_pid()){
-          broken = true;
-          break;
-        }
         if(idx_seen_accesses && seen_accesses[idx_seen_accesses-1] == k){
           broken = true;
           break;
         }
       }
-
       if(broken)
         continue;
 
@@ -1254,17 +1258,26 @@ void TSOTraceBuilder::add_branch(int i, int j, bool is_conservative){
     }
 
     /* Be more strict with conservative branches.
-     * Reject a branch if is alread in the conservative set.
+     * Reject a branch if is already in the conservative set.
      */
-
-    if(conf.preem_method == Configuration::BPOR){
+    // added is_conservative at the beggining..
+    // I should think about it.
+    if(is_conservative && conf.preemption_bound >=0 && conf.preem_method == Configuration::BPOR){
       if(prefix[i].conservative_branches.count(cand.pid)){ // Should i check for conservativity???
       /* This branch has already been considered
        */
       return;
     }
 
-      if(false && i && prefix[i-1].branch.count(cand)){
+    /* Reject branch if the thread was unavailable at that position
+     */
+    if(is_conservative && prefix[i].unavailable_threads.size()){ 
+        if(prefix[i].unavailable_threads.count(cand.pid) || prefix[i].unavailable_threads.back() <= cand.pid){
+            return;
+        }
+      }
+
+    if(i && prefix[i-1].branch.count(cand)){
         prefix[i].conservative_branches.insert(cand.pid);
         return;
       }
