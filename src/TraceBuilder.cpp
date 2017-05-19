@@ -21,6 +21,10 @@
 
 TraceBuilder::TraceBuilder(const Configuration &C) : conf(C) {
   bound_blocked = false;
+  source_sets_enabled = true;
+  add_more_branches = false;
+  bound_cnt = 0;
+  branches_rejected = 0;
 }
 
 TraceBuilder::~TraceBuilder(){

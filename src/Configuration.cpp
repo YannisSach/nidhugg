@@ -86,11 +86,12 @@ static llvm::cl::opt<int> cl_preemption_bound("bound", llvm::cl::NotHidden,llvm:
 
 static llvm::cl::opt<Configuration::PreemptionMethod> cl_preem_meth("preemption-bounding", 
                                                                     llvm::cl::NotHidden,
-                                                                    llvm::cl::desc("Pick a preemtpion bounding method simple or bpor (simple by default)."),
+                                                                    llvm::cl::desc("Pick a preemtpion bounding method simple , source-bpor or persistent-bpor (simple by default)."),
                                                                     llvm::cl::init(Configuration::SIMPLE),
                                                                     llvm::cl::value_desc("METHOD"),
                                                                     llvm::cl::values(clEnumValN(Configuration::SIMPLE,"S","SIMPLE"),
-                                                                                     clEnumValN(Configuration::BPOR, "B", "BPOR"),
+                                                                                     clEnumValN(Configuration::SBPOR, "SB", "Source-BPOR"),
+                                                                                     clEnumValN(Configuration::PBPOR, "PB", "Persistent-BPOR"),
                                                                                      clEnumValEnd));
 
 const std::set<std::string> &Configuration::commandline_opts(){
@@ -204,4 +205,15 @@ void Configuration::check_commandline(){
       }
     }
   }
+
+  /* Check command line for controversial statements such as preemtpion bound with negative bound
+   */
+
+   if(cl_preem_meth == Configuration::SBPOR || cl_preem_meth == Configuration::PBPOR){
+     if(cl_preemption_bound < 0){
+       Debug::warn("Configuartion::check_commandline::preemption_method")
+          << "WARNING:: --preemption-bounding ignored because of negative bound. Switching to simple.\n";
+     }
+   }
+
 }

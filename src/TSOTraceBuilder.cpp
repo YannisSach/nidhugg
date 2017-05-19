@@ -102,7 +102,7 @@ bool TSOTraceBuilder::schedule(int *proc, int *aux, int *alt, bool *dryrun){
   }
 
   /* Before we schedule the new event. We should store the non available threads at this event.
-   * This is important when adding conservative backtracking points.
+   * This is important when adding conservative backtrack points.
    */
   if(prefix_idx > 0){
     for(unsigned k = 0; k < threads.size(); k++){
@@ -141,7 +141,6 @@ bool TSOTraceBuilder::schedule(int *proc, int *aux, int *alt, bool *dryrun){
         return false;
       } 
 
-retry:
   for(p = 1; p < sz; p += 2){ // Loop through auxiliary threads
     if(threads[p].available && !threads[p].sleeping &&
        (conf.max_search_depth < 0 || threads[p].clock[p] < conf.max_search_depth)){
@@ -155,7 +154,7 @@ retry:
       {
         bound_cnt++;
       }
-      if(conf.preemption_bound >=0 && bound_cnt > conf.preemption_bound && conf.preem_method == Configuration::BPOR) {
+      if(conf.preemption_bound >=0 && bound_cnt > conf.preemption_bound && conf.preem_method == Configuration::SBPOR) {
         if(is_previous_available && p != previous_id)
           bound_cnt--;
         --threads[p].clock[p];
@@ -169,8 +168,8 @@ retry:
   }
 
   //Prioritize running thread
-  if(prefix_idx>0 && conf.preemption_bound >=0 && conf.preem_method == Configuration::BPOR){
-  // if(conf.preemption_bound >=0 && conf.preem_method == Configuration::BPOR){
+  if(prefix_idx>0 && add_more_branches){
+  // if(conf.preemption_bound >=0 && conf.preem_method == Configuration::SBPOR){
     p = prefix[prefix_idx-1].iid.get_pid();
     if(threads[p].available && !threads[p].sleeping &&
        (conf.max_search_depth < 0 || threads[p].clock[p] < conf.max_search_depth)){
@@ -206,7 +205,7 @@ retry:
        * Most probably this will never be used because the current thread has the highest priority for scheduling.
        */
 
-      if(conf.preemption_bound >=0 && bound_cnt > conf.preemption_bound && conf.preem_method == Configuration::BPOR) {
+      if(conf.preemption_bound >=0 && bound_cnt > conf.preemption_bound && conf.preem_method == Configuration::SBPOR) {
         if(is_previous_available && p != previous_id){
           bound_cnt--;
         }
@@ -227,34 +226,6 @@ retry:
     }
   }
 
-
-  /* This will be removed soon.
-   * Force all the threads to wake up if no thread is available.
-   * Conservative branching at the beginning of a thread block put threads to sleep set even though these threads were never
-   * scheduled.
-   * conservative_branches is better implementetion.
-   */
-
-  if(false && conf.preemption_bound >= 0 && conf.preem_method == Configuration::BPOR){
-
-
-    for(p = 0; p < sz; p++){
-      threads[p].sleeping = false;
-      prefix[prefix_idx-1].wakeup.insert(p);
-    }
-    bool nobody_available = true;
-    for(p = 0; p < sz && nobody_available; p++){
-      if(threads[p].available)
-        nobody_available = false;
-    }
-    if(!nobody_available){
-      if(hard_reset_allowed <= 0){
-        return false;
-      }
-      hard_reset_allowed--;
-      goto retry;
-    }
-  }
   return false; // No available threads
 }
 
@@ -369,7 +340,7 @@ Branch br = prefix[i].branch[0];
  * There are logic errors here not fixed because this optimization didn't reduce the trace count.
  */
 
-if(false && conf.preem_method == Configuration::BPOR){
+if(false && conf.preem_method == Configuration::SBPOR){
   int current_proc = prefix[i].iid.get_pid();
   if(!br.is_conservative){
     // std::cout << "Not Conservative\n";
@@ -423,8 +394,10 @@ if(false && conf.preem_method == Configuration::BPOR){
      */
 
     if(br.pid != prefix[i].iid.get_pid()){
-      if(conf.preemption_bound < 0 || !br.is_conservative)
-        evt.sleep.insert(prefix[i].iid.get_pid());
+      if(conf.preemption_bound < 0 || !br.is_conservative){
+        //if(conf.preem_method != Configuration::PBPOR || evt.branch.size() == 0 )
+          evt.sleep.insert(prefix[i].iid.get_pid());
+      }
 
       evt.conservative_branches.insert(br.pid);
       evt.conservative_branches.insert(prefix[i].iid.get_pid());
@@ -435,7 +408,6 @@ if(false && conf.preem_method == Configuration::BPOR){
       prefix[i].sleep_branch_trace_count + estimate_trace_count(i+1);
 
     prefix[i] = evt;
-    //Yannis
     prefix[i].current_cnt = bound_cnt;
 
     prefix.resize(i+1,prefix[0]);
@@ -506,7 +478,7 @@ void TSOTraceBuilder::debug_print() const {
     llvm::dbgs() << "}";
     if(conf.preemption_bound >=0)
       llvm::dbgs() << " BC:{" << prefix[i].current_cnt << "}";
-    if(conf.preem_method == Configuration::BPOR){
+    if(conf.preem_method == Configuration::SBPOR || conf.preem_method == Configuration::PBPOR){
       llvm::dbgs() << " CS:{";
       for(int j = 0; j < prefix[i].conservative_branches.size(); j++){
         if(j != 0 ) llvm::dbgs() << ", ";
@@ -1124,6 +1096,7 @@ void TSOTraceBuilder::see_events(const VecSet<int> &seen_accesses){// Finding I 
   int idx_seen_accesses = -1;
   for(int i : seen_accesses){
     idx_seen_accesses++;
+    //std::cout << prefix_idx << " " << i << "\n";
     if(i < 0) continue;
     const VClock<IPid> &iclock = prefix[i].clock;
     // This event happens before current event
@@ -1144,10 +1117,11 @@ void TSOTraceBuilder::see_events(const VecSet<int> &seen_accesses){// Finding I 
     /* Try to add a branch at the beginning of the thread block where the collision happens.
      * The thread put to branch should be available (or just exist) at the beggining of the block.
      */
-    if(conf.preemption_bound >= 0 && conf.preem_method ==Configuration::BPOR && conf.memory_model == Configuration::SC){
+    if(add_more_branches){
     // if(false){
       bool broken = false;
       for(k = i-1; k>=0 && current_proc == prefix[k].iid.get_pid();   k--){
+        /* If a previous access was made by the same thread continue. */
         if(idx_seen_accesses && seen_accesses[idx_seen_accesses-1] == k){
           broken = true;
           break;
@@ -1216,31 +1190,49 @@ void TSOTraceBuilder::add_branch(int i, int j, bool is_conservative){
   std::vector<int> candidates;
   Branch cand = {-1,0,is_conservative};
   const VClock<IPid> &iclock = prefix[i].clock;
-  for(int k = i+1; k <= j; ++k){
+  Branch previous = cand;
+
+  bool same_as_persistent = true;
+  //If persistent bpor is set don't iterate over prefix[i+1,...]. Just try to add process in j
+  int start = i+1;
+
+  for(int k = start; k <= j; ++k){
     IPid p = prefix[k].iid.get_pid();
+    //std::cout << "Considering "<< p <<" for " << i<<"\n";
     /* Did we already cover p? */
     if(p < int(candidates.size()) && 0 <= candidates[p]) continue;
     const VClock<IPid> &pclock = prefix[k].clock;
     /* Is p after prefix[i]? */
-    if(k != j && iclock.leq(pclock)) continue;
-    /* Is p after some other candidate? */
-    bool is_after = false;
-    for(int q = 0; !is_after && q < int(candidates.size()); ++q){
-      if(0 <= candidates[q] && candidates[q] <= pclock[q]){
-        is_after = true;
+    /* We shouldn't consider the clock when using persistent bpor */
+      if (k != j && iclock.leq(pclock))
+        continue;
+
+      /* Is p after some other candidate? */
+      bool is_after = false;
+      for (int q = 0; !is_after && q < int(candidates.size()); ++q)
+      {
+        if (0 <= candidates[q] && candidates[q] <= pclock[q])
+        {
+          is_after = true;
+        }
       }
-    }
-    if(is_after) continue;
+      if (is_after)
+        continue;
     if(int(candidates.size()) <= p){
       candidates.resize(p+1,-1);
     }
+    previous = cand;
     candidates[p] = prefix[k].iid.get_index();
     cand.pid = p;
 
+
+    /* In this if statemenent lies the difference between source DPOR and persistent 
+    */
+    //if(same_as_persistent && source_sets_enabled && prefix[i].branch.count(cand)){ //|| prefix[i].branch.count({cand.pid,cand.alt,!(cand.is_conservative)})){
+    //if(!is_conservative && prefix[i].branch.count(cand)){ //|| prefix[i].branch.count({cand.pid,cand.alt,!(cand.is_conservative)})){
     if(prefix[i].branch.count(cand)){ //|| prefix[i].branch.count({cand.pid,cand.alt,!(cand.is_conservative)})){
       /* There is already a satisfactory candidate branch */
        int bid = prefix[i].branch.find(cand);
-
        /* Update the conservative branches with the non conservative ones.
         */
 
@@ -1249,39 +1241,64 @@ void TSOTraceBuilder::add_branch(int i, int j, bool is_conservative){
            prefix[i].branch.insert(cand);
          }
        }
-      return;
-    }
-    if(isleep.count(cand.pid)){
-      /* This candidate is already sleeping (has been considered) at
-       * prefix[i]. */
+      /* Don't try to consider this candidate as conservative branch
+       */
+       if(!source_sets_enabled){
+        cand = previous;
+        continue;
+      }
+
+//       same_as_persistent = false;
+//       goto keep_going;
       return;
     }
 
+
+keep_going:    
     /* Be more strict with conservative branches.
-     * Reject a branch if is already in the conservative set.
+     * Reject a branch if it is already in the conservative set.
      */
     // added is_conservative at the beggining..
     // I should think about it.
-    if(is_conservative && conf.preemption_bound >=0 && conf.preem_method == Configuration::BPOR){
+    if(is_conservative && add_more_branches){ 
       if(prefix[i].conservative_branches.count(cand.pid)){ // Should i check for conservativity???
       /* This branch has already been considered
        */
+        if(false && !source_sets_enabled && previous.pid > 0){
+          prefix[i].branch.insert(previous);
+        }
+        return;
+      }
+    }
+
+    if(isleep.count(cand.pid)){
+      /* This candidate is already sleeping (has been considered) at
+       * prefix[i]. */
+      if(!source_sets_enabled){
+        cand = previous;
+        continue;
+      }
       return;
     }
 
-    /* Reject branch if the thread was unavailable at that position
+    /* We should not perform more checks when executing persistent bpor
      */
-    if(is_conservative && prefix[i].unavailable_threads.size()){ 
+
+       /* Reject branch if the thread was unavailable at that position or hadn't been spawned yet (cand.pid >= unavailable threads back)
+     */
+    if(false && is_conservative && prefix[i].unavailable_threads.size()){ 
         if(prefix[i].unavailable_threads.count(cand.pid) || prefix[i].unavailable_threads.back() <= cand.pid){
             return;
         }
       }
 
-    if(i && prefix[i-1].branch.count(cand)){
+    /* Reject branch if there is already the same branch before that.
+     * Not usefull if scheduling is changed.
+    */
+    if(false && i && prefix[i-1].branch.count(cand)){
         prefix[i].conservative_branches.insert(cand.pid);
         return;
       }
-  }
 
   }
 
@@ -1296,17 +1313,13 @@ void TSOTraceBuilder::add_branch(int i, int j, bool is_conservative){
     }
   }
 
+  /* No appropriate candidate found
+   */
+  if(cand.pid < 0) return;
+
   assert(0 <= cand.pid);
-  // std::cout << "New candidate added \n";
 
   prefix[i].branch.insert(cand);
-
-  //Since a conservative branch is added lets remove it from above
-  // if(cand.is_conservative){
-  //   if(i>0){
-  //     prefix[i-1].branch.erase(cand);
-  //   }
-  // }
 }
 
 bool TSOTraceBuilder::has_pending_store(IPid pid, void const *ml) const {

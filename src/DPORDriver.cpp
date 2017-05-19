@@ -196,15 +196,11 @@ DPORDriver::Result DPORDriver::run(){
   case Configuration::SC:
     TB = new TSOTraceBuilder(conf);
     //Yannis
-    TB->bound_cnt = 0;
-    TB->bound_reset = false;
-    TB->hard_reset_allowed = 0;
-    TB->branches_rejected = 0;
+    TB->add_more_branches = (conf.preem_method == Configuration::PBPOR || conf.preem_method == Configuration::SBPOR) && conf.preemption_bound >= 0 ;
+    TB->source_sets_enabled = ! (conf.preem_method == Configuration::PBPOR);
     break;
   case Configuration::TSO:
     TB = new TSOTraceBuilder(conf);
-    TB->bound_cnt = 0;
-    TB->bound_reset = false;
     break;
   case Configuration::PSO:
     TB = new PSOTraceBuilder(conf);

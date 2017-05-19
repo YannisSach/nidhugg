@@ -46,10 +46,10 @@ public:
   //Yannis
   int bound_limit;
   int bound_cnt;
-  bool bound_reset;
-  int hard_reset_allowed;
   int branches_rejected;
   bool bound_blocked;
+  bool add_more_branches;
+  bool source_sets_enabled;
 
   virtual ~TraceBuilder();
   /* Returns true iff the sleepset is currently empty. */

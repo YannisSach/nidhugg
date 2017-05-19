@@ -33,3 +33,4 @@ src/Makefile
 src/Makefile.in
 stamp-*
 test-driver
+.vscode
