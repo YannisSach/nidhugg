@@ -1174,6 +1174,7 @@ void TSOTraceBuilder::add_branch(int i, int j, bool is_conservative){
   
 
   VecSet<IPid> isleep = sleep_set_at(i);
+  
   /* candidates is a map from IPid p to event index i such that the
    * IID (p,i) identifies an event between prefix[i] (exclusive) and
    * prefix[j] (inclusive) such that (p,i) does not happen-after any
@@ -1190,6 +1191,7 @@ void TSOTraceBuilder::add_branch(int i, int j, bool is_conservative){
   std::vector<int> candidates;
   Branch cand = {-1,0,is_conservative};
   const VClock<IPid> &iclock = prefix[i].clock;
+  const VClock<IPid> &jclock = prefix[j].clock;
   Branch previous = cand;
 
   bool same_as_persistent = true;
@@ -1203,7 +1205,6 @@ void TSOTraceBuilder::add_branch(int i, int j, bool is_conservative){
     if(p < int(candidates.size()) && 0 <= candidates[p]) continue;
     const VClock<IPid> &pclock = prefix[k].clock;
     /* Is p after prefix[i]? */
-    /* We shouldn't consider the clock when using persistent bpor */
       if (k != j && iclock.leq(pclock))
         continue;
 
@@ -1225,7 +1226,6 @@ void TSOTraceBuilder::add_branch(int i, int j, bool is_conservative){
     candidates[p] = prefix[k].iid.get_index();
     cand.pid = p;
 
-
     /* In this if statemenent lies the difference between source DPOR and persistent 
     */
     //if(same_as_persistent && source_sets_enabled && prefix[i].branch.count(cand)){ //|| prefix[i].branch.count({cand.pid,cand.alt,!(cand.is_conservative)})){
@@ -1243,18 +1243,20 @@ void TSOTraceBuilder::add_branch(int i, int j, bool is_conservative){
        }
       /* Don't try to consider this candidate as conservative branch
        */
-       if(!source_sets_enabled){
-        cand = previous;
-        continue;
-      }
-
-//       same_as_persistent = false;
-//       goto keep_going;
+       if(!source_sets_enabled || is_conservative){
+         if(jclock.includes(prefix[k].iid) || cand.pid == prefix[j].iid.get_pid()){
+           if(false && cand.pid != prefix[j].iid.get_pid()){
+            std::cout << cand.pid << ":" <<prefix[k].clock.to_string() << "\n";
+            std::cout << prefix[j].iid.get_pid() << ":" <<prefix[j].clock.to_string() << "\n";
+           }
+           return;
+         }
+         continue;
+       }
       return;
     }
 
 
-keep_going:    
     /* Be more strict with conservative branches.
      * Reject a branch if it is already in the conservative set.
      */
@@ -1267,15 +1269,24 @@ keep_going:
         if(false && !source_sets_enabled && previous.pid > 0){
           prefix[i].branch.insert(previous);
         }
-        return;
+        //if(pclock.lt(jclock) || cand.pid == prefix[j].iid.get_pid())
+        if(jclock.includes(prefix[k].iid) || cand.pid == prefix[j].iid.get_pid())
+          return;
+        continue;
       }
     }
 
     if(isleep.count(cand.pid)){
       /* This candidate is already sleeping (has been considered) at
        * prefix[i]. */
-      if(!source_sets_enabled){
-        cand = previous;
+      if(!source_sets_enabled || is_conservative){
+         //if(pclock.lt(jclock) || cand.pid == prefix[j].iid.get_pid())
+         if(jclock.includes(prefix[k].iid) || cand.pid == prefix[j].iid.get_pid()){
+           if(false && cand.pid != prefix[j].iid.get_pid()){
+            std::cout << "Sleep optimization applied " << (cand.pid == prefix[j].iid.get_pid()) << "\n";
+           }
+            return;
+         }
         continue;
       }
       return;
@@ -1315,7 +1326,9 @@ keep_going:
 
   /* No appropriate candidate found
    */
-  if(cand.pid < 0) return;
+  if(cand.pid < 0) {
+    return;
+  }
 
   assert(0 <= cand.pid);
 
