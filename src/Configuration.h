@@ -86,7 +86,7 @@ public:
     check_robustness = false;
     ee_store_trace = false;
     debug_collect_all_traces = false;
-    debug_print_on_reset = true;
+    debug_print_on_reset = false;
     debug_print_on_error = false;
     transform_spin_assume = true;
     transform_loop_unroll = -1;
