@@ -36,8 +36,23 @@ cl_transform("transform",llvm::cl::init(""),
              llvm::cl::desc("Transform the input module and store it (as LLVM assembly) to OUTFILE."),
              llvm::cl::NotHidden,llvm::cl::value_desc("OUTFILE"));
 
+llvm::cl::opt<std::string>
+cl_input_file(llvm::cl::desc("<input bitcode or assembly>"),
+              llvm::cl::Positional,
+              llvm::cl::init("-"));
+
+llvm::cl::list<std::string>
+cl_program_arguments(llvm::cl::desc("[-- <program arguments>...]"),
+                     llvm::cl::Positional,
+                     llvm::cl::ZeroOrMore);
+
+#ifdef LLVM_CL_VERSIONPRINTER_TAKES_RAW_OSTREAM
+void print_version(llvm::raw_ostream &out){
+#else
 void print_version(){
-  std::cout << PACKAGE_STRING
+  auto &out = std::cout;
+#endif
+  out << PACKAGE_STRING
             << " ("
 #ifdef GIT_COMMIT
             << GIT_COMMIT << ", "
@@ -79,10 +94,6 @@ int main(int argc, char *argv[]){
       }
     }
   }
-  llvm::cl::opt<std::string>
-    input_file(llvm::cl::desc("<input bitcode or assembly>"),
-               llvm::cl::Positional,
-               llvm::cl::init("-"));
   llvm::cl::ParseCommandLineOptions(argc, argv);
 
   bool errors_detected = false;
@@ -92,11 +103,11 @@ int main(int argc, char *argv[]){
     conf.check_commandline();
     
     if(cl_transform != ""){
-      Transform::transform(input_file,cl_transform,conf);
+      Transform::transform(cl_input_file,cl_transform,conf);
     }else{
       /* Use DPORDriver to explore the given module */
       DPORDriver *driver =
-        DPORDriver::parseIRFile(input_file,conf);
+        DPORDriver::parseIRFile(cl_input_file,conf);
 
       DPORDriver::Result res = driver->run();
       if(conf.preemption_bound >=0) {

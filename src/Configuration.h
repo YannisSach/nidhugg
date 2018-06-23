@@ -42,6 +42,10 @@ public:
     PSO,
     TSO
   };
+  enum DPORAlgorithm{
+    SOURCE,
+    OPTIMAL
+  };
   /* Assign default values to all configuration parameters. */
   Configuration(){
     explore_all_traces = false;
@@ -49,6 +53,7 @@ public:
     mutex_require_init = true;
     max_search_depth = -1;
     memory_model = MM_UNDEF;
+    dpor_algorithm = SOURCE;
     extfun_no_fence = {
       "pthread_self",
       "malloc",
@@ -75,7 +80,7 @@ public:
       "__assert_fail",
       "atexit"
     };
-
+    observers = false;
     check_robustness = false;
     ee_store_trace = false;
     debug_collect_all_traces = false;
@@ -87,6 +92,7 @@ public:
     print_progress_estimate = false;
     preemption_bound = -1;
     more_branches = false;
+    argv.push_back(get_default_program_name());
   };
   /* Read the switches given to the program by the user. Assign
    * configuration options accordingly.
@@ -120,6 +126,10 @@ public:
   int max_search_depth;
   /* Which memory model should be assumed? */
   MemoryModel memory_model;
+  /* Which DPOR algorithm should be used? */
+  DPORAlgorithm dpor_algorithm;
+  /* Should the observers optimisation be used? */
+  bool observers;
   /* A set of names of external functions that should be assumed to
    * not have fencing behavior. Notice however that the function
    * itself will still execute atomically, which may cause behaviors
@@ -186,6 +196,15 @@ public:
    */
   bool more_branches;
 
+  /* The arguments that will be passed to the program under test */
+  std::vector<std::string> argv;
+  /* The default program name to send to the program under test as
+   * argv[0].
+   */
+  static const std::string &get_default_program_name(){
+    static const std::string pname = "a.out";
+    return pname;
+  }
   /* The set of all commandline switches that are associated with
    * setting configuration options. This set has nothing to do with
    * which switches were actually given by the user.

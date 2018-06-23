@@ -23,7 +23,6 @@
 #define __TRACE_BUILDER_H__
 
 #include "Configuration.h"
-#include "MRef.h"
 #include "Trace.h"
 
 #include <string>
@@ -109,6 +108,12 @@ public:
    * rather than the current.
    */
   virtual void memory_error(std::string msg, const IID<CPid> &loc = IID<CPid>());
+  /* Notify the TraceBuilder that nondeterminism has been detected.
+   *
+   * If loc is given, the error is associated with that location
+   * rather than the current.
+   */
+  virtual void nondeterminism_error(std::string msg, const IID<CPid> &loc = IID<CPid>());
   /* Estimate the total number of traces for this program based on the
    * traces that have been seen.
    */

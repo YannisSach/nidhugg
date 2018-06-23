@@ -23,9 +23,9 @@
 #define __TSO_PSO_TRACE_BUILDER_H__
 
 #include "Configuration.h"
-#include "MRef.h"
+#include "SymAddr.h"
 #include "Trace.h"
-#include "TraceBuilder.h"
+#include "DetCheckTraceBuilder.h"
 
 #include <string>
 #include <vector>
@@ -44,10 +44,10 @@
  * memory model specific.
  */
 
-class TSOPSOTraceBuilder : public TraceBuilder{
+class TSOPSOTraceBuilder : public DetCheckTraceBuilder{
 public:
   TSOPSOTraceBuilder(const Configuration &conf = Configuration::default_conf)
-    : TraceBuilder(conf) {};
+    : DetCheckTraceBuilder(conf) {};
   virtual ~TSOPSOTraceBuilder() {};
   /* Schedules the next thread.
    *
@@ -96,6 +96,11 @@ public:
    * because it is blocked waiting for something.
    */
   virtual void mark_unavailable(int proc, int aux = -1) = 0;
+  /* If we are not in a replay, do nothing. Otherwise cancel the
+   * replay from here on, so that the computation may continue
+   * according to an arbitrary schedule.
+   */
+  virtual void cancel_replay() = 0;
   /* Associate the currently scheduled event with LLVM "dbg" metadata. */
   virtual void metadata(const llvm::MDNode *md) = 0;
 
@@ -110,7 +115,7 @@ public:
   /* The current event spawned a new thread. */
   virtual void spawn() = 0;
   /* Perform a store to ml. */
-  virtual void store(const ConstMRef &ml) = 0;
+  virtual void store(const SymData &ml) = 0;
   /* Perform an atomic store to ml.
    *
    * The exact interpretation depends on the memory model. But
@@ -120,9 +125,17 @@ public:
    * atomic_store performed by auxiliary threads can be used to model
    * memory updates under non-SC memory models.
    */
-  virtual void atomic_store(const ConstMRef &ml) = 0;
+  virtual void atomic_store(const SymData &ml) = 0;
+  /* Perform a compare-exchange to sd.get_ref().
+   *
+   * success is true iff ml.get_ref() contained the value of expected.
+   * Equivalently, if the value of sd was written.
+   */
+  virtual void compare_exchange(const SymData &sd,
+                                const SymData::block_type expected,
+                                bool success) = 0;
   /* Perform a load to ml. */
-  virtual void load(const ConstMRef &ml) = 0;
+  virtual void load(const SymAddrSize &ml) = 0;
   /* Perform an action that conflicts with all memory accesses and all
    * other full memory conflicts.
    *
@@ -138,39 +151,39 @@ public:
   /* Perform a successful pthread_mutex_lock to the pthread mutex at
    * ml.
    */
-  virtual void mutex_lock(const ConstMRef &ml) = 0;
+  virtual void mutex_lock(const SymAddrSize &ml) = 0;
   /* Perform a failed attempt at pthread_mutex_lock to the pthread
    * mutex at ml.
    */
-  virtual void mutex_lock_fail(const ConstMRef &ml) = 0;
+  virtual void mutex_lock_fail(const SymAddrSize &ml) = 0;
   /* Perform a pthread_mutex_trylock (successful or failing) to the
    * pthread mutex at ml.
    */
-  virtual void mutex_trylock(const ConstMRef &ml) = 0;
+  virtual void mutex_trylock(const SymAddrSize &ml) = 0;
   /* Perform a pthread_mutex_unlock to the pthread mutex at ml. */
-  virtual void mutex_unlock(const ConstMRef &ml) = 0;
+  virtual void mutex_unlock(const SymAddrSize &ml) = 0;
   /* Initialize a pthread mutex at ml. */
-  virtual void mutex_init(const ConstMRef &ml) = 0;
+  virtual void mutex_init(const SymAddrSize &ml) = 0;
   /* Destroy a pthread mutex at ml. */
-  virtual void mutex_destroy(const ConstMRef &ml) = 0;
+  virtual void mutex_destroy(const SymAddrSize &ml) = 0;
   /* Initialize a pthread condition variable at ml.
    *
    * Returns true on success, false if a pthreads_error has been
    * generated.
    */
-  virtual bool cond_init(const ConstMRef &ml) = 0;
+  virtual bool cond_init(const SymAddrSize &ml) = 0;
   /* Signal on the condition variable at ml.
    *
    * Returns true on success, false if a pthreads_error has been
    * generated.
    */
-  virtual bool cond_signal(const ConstMRef &ml) = 0;
+  virtual bool cond_signal(const SymAddrSize &ml) = 0;
   /* Broadcast on the condition variable at ml.
    *
    * Returns true on success, false if a pthreads_error has been
    * generated.
    */
-  virtual bool cond_broadcast(const ConstMRef &ml) = 0;
+  virtual bool cond_broadcast(const SymAddrSize &ml) = 0;
   /* Wait for a condition variable at cond_ml.
    *
    * The mutex at mutex_ml is used as the mutex for pthread_cond_wait.
@@ -178,14 +191,22 @@ public:
    * Returns true on success, false if a pthreads_error has been
    * generated.
    */
-  virtual bool cond_wait(const ConstMRef &cond_ml, const ConstMRef &mutex_ml) = 0;
+  virtual bool cond_wait(const SymAddrSize &cond_ml, const SymAddrSize &mutex_ml) = 0;
+  /* Get awoken after waiting for a condition variable at cond_ml.
+   *
+   * The mutex at mutex_ml is used as the mutex for pthread_cond_wait.
+   *
+   * Returns true on success, false if a pthreads_error has been
+   * generated.
+   */
+  virtual bool cond_awake(const SymAddrSize &cond_ml, const SymAddrSize &mutex_ml) = 0;
   /* Destroy a pthread condition variable at ml.
    *
    * Returns 0 on success, EBUSY if some thread was waiting for the
    * condition variable, another value if a pthreads_error has been
    * generated.
    */
-  virtual int cond_destroy(const ConstMRef &ml) = 0;
+  virtual int cond_destroy(const SymAddrSize &ml) = 0;
   /* Notify TraceBuilder that the current event may
    * nondeterministically execute in several alternative ways. The
    * number of ways is given in alt_count.

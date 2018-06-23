@@ -964,16 +964,21 @@ void POWERInterpreter::visitSwitchInst(llvm::SwitchInst &I) {
   const unsigned nc = I.getNumCases();
   llvm::SwitchInst::CaseIt cit = I.case_begin();
   for(unsigned i = 0; i < nc; ++i, ++cit){
+#ifdef LLVM_SWITCHINST_CASEIT_NEEDS_DEREFERENCE
+    auto &cv = *cit;
+#else
+    auto &cv = cit;
+#endif
     llvm::GenericValue CaseVal = getOperandValue(2*i+2);
     if(CaseVal.AggregateVal.size()){
       assert(CaseVal.AggregateVal.size() == 1);
       assert(CaseVal.AggregateVal[0].AggregateVal.size() == 2);
       CaseVal = CaseVal.AggregateVal[0].AggregateVal[0];
     }else{
-      assert(I.getOperand(2*i+2) == cit.getCaseValue());
+      assert(I.getOperand(2*i+2) == cv.getCaseValue());
     }
     if(executeICMP_EQ(CondVal, CaseVal, ElTy).IntVal != 0){
-      Dest = llvm::cast<llvm::BasicBlock>(cit.getCaseSuccessor());
+      Dest = llvm::cast<llvm::BasicBlock>(cv.getCaseSuccessor());
       break;
     }
   }
@@ -1049,7 +1054,11 @@ llvm::GenericValue POWERInterpreter::executeGEPOperation(llvm::Value *PtrVal,
   uint64_t Total = 0;
 
   for (unsigned i = 1; I != E; ++I, ++i) {
+#ifdef LLVM_NEW_GEP_TYPE_ITERATOR_API
+    if (llvm::StructType *STy = I.getStructTypeOrNull()) {
+#else
     if (llvm::StructType *STy = llvm::dyn_cast<llvm::StructType>(*I)) {
+#endif
       const llvm::StructLayout *SLO = TD.getStructLayout(STy);
 
       const llvm::ConstantInt *CPU = llvm::cast<llvm::ConstantInt>(I.getOperand());
@@ -1057,7 +1066,6 @@ llvm::GenericValue POWERInterpreter::executeGEPOperation(llvm::Value *PtrVal,
 
       Total += SLO->getElementOffset(Index);
     } else {
-      llvm::SequentialType *ST = llvm::cast<llvm::SequentialType>(*I);
       // Get the index number for the array... which must be long type...
       assert(i < Operands.size());
       assert(Operands[i].Available);
@@ -1072,7 +1080,13 @@ llvm::GenericValue POWERInterpreter::executeGEPOperation(llvm::Value *PtrVal,
         assert(BitWidth == 64 && "Invalid index type for getelementptr");
         Idx = (int64_t)IdxGV.IntVal.getZExtValue();
       }
-      Total += TD.getTypeAllocSize(ST->getElementType())*Idx;
+      Total += TD.getTypeAllocSize
+#ifdef LLVM_NEW_GEP_TYPE_ITERATOR_API
+        (I.getIndexedType()
+#else
+        (llvm::cast<llvm::SequentialType>(*I)->getElementType()
+#endif
+         )*Idx;
     }
   }
 
@@ -1190,6 +1204,35 @@ void POWERInterpreter::visitCallSite(llvm::CallSite CS) {
           /* Ignore this intrinsic function */
           return;
         }
+
+        /* Other processes with program counter inside the same basic
+         * block as this one may be invalidated when the intrinsic
+         * function is lowered. This goes not only for the program
+         * counter in the topmost stack frame, but for all program
+         * counters on the stack. For each such program counter, store
+         * it as an integer during rewriting and restore it
+         * afterwards.
+         */
+        std::map<ExecutionContext*,int> pcs;
+        for(unsigned i = 0; i < Threads.size(); ++i){ // Other thread
+          int smax = Threads[i].ECStack.size();
+          if(i == (unsigned)CurrentThread){
+            // Don't change the top-most stack-frame of the current thread.
+            --smax;
+          }
+          for(int j = 0; j < smax; ++j){ // Stack frame
+            ExecutionContext *EC = &Threads[i].ECStack[j];
+            if(EC->CurBB == SF.CurBB){ // Pointing into this basic block
+              int c = 0; // PC as offset from beginning of basic block
+              while(EC->CurInst != EC->CurBB->begin()){
+                --EC->CurInst;
+                ++c;
+              }
+              pcs[EC] = c;
+            }
+          }
+        }
+
         // If it is an unknown intrinsic function, use the intrinsic lowering
         // class to transform it into hopefully tasty LLVM code.
         //
@@ -1207,6 +1250,16 @@ void POWERInterpreter::visitCallSite(llvm::CallSite CS) {
         } else {
           SF.CurInst = me;
           ++SF.CurInst;
+        }
+
+        /* Restore the program counters for other stack frames in the
+         * same basic block.
+         */
+        for(auto it : pcs){
+          ExecutionContext *EC = it.first;
+          int c = it.second;
+          EC->CurInst = EC->CurBB->begin();
+          while(c--) ++EC->CurInst;
         }
         return;
       }
@@ -2279,10 +2332,16 @@ void POWERInterpreter::callAssertFail(llvm::Function *F){
    */
 }
 
-void POWERInterpreter::callMalloc(llvm::Function *F){
-  unsigned n = getOperandValue(0).IntVal.getZExtValue();
-
-  void *Memory = malloc(n);
+void POWERInterpreter::callMCalloc(llvm::Function *F,bool isCalloc){
+  void *Memory;
+  if(isCalloc){
+    unsigned nm = getOperandValue(0).IntVal.getZExtValue();
+    unsigned sz = getOperandValue(1).IntVal.getZExtValue();
+    Memory = calloc(nm,sz);
+  }else{
+    unsigned n = getOperandValue(0).IntVal.getZExtValue();
+    Memory = malloc(n);
+  }
 
   llvm::GenericValue Result = llvm::PTOGV(Memory);
   assert(Result.PointerVal && "Null pointer returned by malloc!");
@@ -2323,14 +2382,14 @@ void POWERInterpreter::callPthreadCreate(llvm::Function *F){
   llvm::Function *F_inner = (llvm::Function*)GVTOP(getOperandValue(2));
   std::vector<llvm::Value*> ArgVals_inner;
   llvm::Type *i8ptr = llvm::Type::getInt8PtrTy(F->getContext());
-  if(F_inner->getArgumentList().size() == 1 &&
+  if(F_inner->arg_size() == 1 &&
      F_inner->arg_begin()->getType() == i8ptr){
     void *opval = llvm::GVTOP(getOperandValue(3));
     llvm::Type *i64 = llvm::Type::getInt64Ty(F->getContext());
     llvm::Constant *opval_int = llvm::ConstantInt::get(i64,uint64_t(opval));
     llvm::Value *opval_ptr = llvm::ConstantExpr::getIntToPtr(opval_int,i8ptr);
     ArgVals_inner.push_back(opval_ptr);
-  }else if(F_inner->getArgumentList().size()){
+  }else if(F_inner->arg_size()){
     std::string _err;
     llvm::raw_string_ostream err(_err);
     err << "Unsupported: function passed as argument to pthread_create has type: "
@@ -2428,7 +2487,10 @@ void POWERInterpreter::callFunction(llvm::Function *F,
   }else if(F->getName().str() == "free"){
     return; // Do nothing
   }else if(F->getName().str() == "malloc"){
-    callMalloc(F);
+    callMCalloc(F,false);
+    return;
+  }else if(F->getName().str() == "calloc"){
+    callMCalloc(F,true);
     return;
   }else if(F->getName().str() == "pthread_create"){
     callPthreadCreate(F);

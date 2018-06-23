@@ -74,6 +74,17 @@ ExecutionEngine *Interpreter::create(Module *M, TSOPSOTraceBuilder &TB,
     // We got an error, just return 0
     return 0;
   }
+#elif defined LLVM_MODULE_MATERIALIZE_LLVM_ALL_ERROR
+  if (Error Err = M->materializeAll()) {
+    std::string Msg;
+    handleAllErrors(std::move(Err), [&](ErrorInfoBase &EIB) {
+      Msg = EIB.message();
+    });
+    if (ErrStr)
+      *ErrStr = Msg;
+    // We got an error, just return 0
+    return nullptr;
+  }
 #else
   if(std::error_code EC = M->materializeAll()){
     // We got an error, just return 0
@@ -109,6 +120,23 @@ Interpreter::Interpreter(Module *M, TSOPSOTraceBuilder &TB,
   initializeExecutionEngine();
   initializeExternalFunctions();
   emitGlobals();
+
+  // Assign symbolic names to all global variables
+  int glbl_ctr = 0;
+  for (auto git = M->global_begin(); git != M->global_end(); ++git) {
+    if (GlobalVariable *gv = dyn_cast<GlobalVariable>(&*git)) {
+#ifdef LLVM_EXECUTIONENGINE_DATALAYOUT_PTR
+      const DataLayout &DL = *getDataLayout();
+#else
+      const DataLayout &DL = getDataLayout();
+#endif
+      size_t GVSize = (size_t)(DL.getTypeAllocSize
+                               (gv->getType()->getElementType()));
+      void *GVPtr = getPointerToGlobal(gv);
+      SymMBlock mb = SymMBlock::Global(++glbl_ctr);
+      AllocatedMem.emplace(GVPtr, SymMBlockSize(std::move(mb), GVSize));
+    }
+  }
 
   IL = new IntrinsicLowering(TD);
 }

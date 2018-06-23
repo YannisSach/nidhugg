@@ -240,9 +240,9 @@ private:
   std::vector<llvm::Function*> AtExitHandlers;
 
   /* A dummy store of the value 0 (int32) to null. */
-  llvm::Instruction *dummy_store;
+  llvm::StoreInst *dummy_store;
   /* A dummy load from null (int8*). */
-  llvm::Instruction *dummy_load8;
+  llvm::LoadInst *dummy_load8;
 
 public:
   explicit POWERInterpreter(llvm::Module *M, POWERARMTraceBuilder &TB,
@@ -508,7 +508,7 @@ private:  // Helper functions
    */
   void callAssertFail(llvm::Function *F);
   void callAssume(llvm::Function *F);
-  void callMalloc(llvm::Function *F);
+  void callMCalloc(llvm::Function *F, bool isCalloc);
   void callPthreadCreate(llvm::Function *F);
   void callPthreadExit(llvm::Function *F);
   void callPthreadJoin(llvm::Function *F);

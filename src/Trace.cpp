@@ -41,7 +41,11 @@
 #elif defined(HAVE_LLVM_CONSTANTS_H)
 #include <llvm/Constants.h>
 #endif
+#if defined(HAVE_LLVM_SUPPORT_DWARF_H)
 #include <llvm/Support/Dwarf.h>
+#elif defined(HAVE_LLVM_BINARYFORMAT_DWARF_H)
+#include <llvm/BinaryFormat/Dwarf.h>
+#endif
 
 Trace::Trace(const std::vector<Error*> &errors, bool blk)
   : errors(errors), blocked(blk) {
@@ -192,6 +196,14 @@ Error *MemoryError::clone() const{
 
 std::string MemoryError::to_string() const{
   return "Memory error at "+loc.to_string()+": ("+msg+")";
+}
+
+Error *NondeterminismError::clone() const{
+  return new NondeterminismError(loc,msg);
+}
+
+std::string NondeterminismError::to_string() const{
+  return "Nondeterminism detected at "+loc.to_string()+": "+msg;
 }
 
 bool Trace::get_location(const llvm::MDNode *m,
