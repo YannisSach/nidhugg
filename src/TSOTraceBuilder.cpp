@@ -137,7 +137,7 @@ bool TSOTraceBuilder::schedule(int *proc, int *aux, int *alt, bool *dryrun){
      prefix[prefix.len()-1].sleep.empty()){
     assert(prefix.children_after(prefix.len()-1) == 0);
     assert(prefix[prefix.len()-1].wakeup.empty());
-    prefix[prefix.size()-2].spawned_thread = prefix[prefix.size()-1].spawned_thread;
+    prefix[prefix.len()-2].spawned_thread = prefix[prefix.len()-1].spawned_thread;
     assert(curev().sym.empty()); /* Would need to be copied */
     assert(curbranch().sym.empty()); /* Can't happen */
     prefix.delete_last();
@@ -225,8 +225,8 @@ retry:
       }if(conf.preemption_bound >=0 && bound_cnt > conf.preemption_bound && conf.more_branches) {
         if(is_previous_available && p != previous_id)
           bound_cnt--;
-        --threads[p].clock[p];
-        prefix.pop_back();
+        --threads[p].event_indices[p];
+        prefix.delete_last();
         continue;
       }
       prefix[prefix_idx].current_cnt = bound_cnt;
@@ -250,8 +250,8 @@ retry:
       if(conf.preemption_bound >=0 && bound_cnt > conf.preemption_bound && conf.more_branches) {
         if(is_previous_available && p != previous_id)
           bound_cnt--;
-        --threads[p].clock[p];
-        prefix.pop_back();
+        --threads[p].event_indices[p]; //old clocks
+        prefix.delete_last();
         continue;
       }
       // std::cout << prefix_idx << " Scheduled: " << p << "\n";
@@ -428,7 +428,7 @@ bool TSOTraceBuilder::reset(){
     //Maybe useful: prefix[i] = evt;
     // prefix[i].current_cnt = bound_cnt;
     //Yannis
-    prev_evt.current_cnt = bound_cnt
+    prev_evt.current_cnt = bound_cnt;
     prefix.enter_first_child(std::move(evt));
   }
 
@@ -1371,9 +1371,10 @@ TSOTraceBuilder::obs_sleep_at(int i) const{
   return sleep;
 }
 
-<<<<<<< HEAD
+
+/* <<<<<<< HEAD
 // void TSOTraceBuilder::see_events(const VecSet<int> &seen_accesses){// Finding I set or WI 
-//   /* Register new branches */
+//   /* Register new branches 
 //   std::vector<int> branch;
 //   for(int i : seen_accesses){
 //     if(i < 0) continue;
@@ -1388,7 +1389,7 @@ TSOTraceBuilder::obs_sleep_at(int i) const{
 //     branch.push_back(i);
 //   }
 
-//   /* Add clocks from seen accesses */
+//   /* Add clocks from seen accesses
 //   IPid ipid = curnode().iid.get_pid();
 //   for(int i : seen_accesses){
 //     if(i < 0) continue;
@@ -1404,7 +1405,7 @@ TSOTraceBuilder::obs_sleep_at(int i) const{
 
 
 void TSOTraceBuilder::see_events(const VecSet<int> &seen_accesses){// Finding I set or WI 
-  /* Register new branches */
+  /* Register new branches 
   std::vector<int> branch;
   for(int i : seen_accesses){
     if(i < 0) continue;
@@ -1438,6 +1439,7 @@ void TSOTraceBuilder::see_events(const VecSet<int> &seen_accesses){// Finding I 
    }
      
 =======
+*/
 void TSOTraceBuilder::obs_sleep_add(struct obs_sleep &sleep,
                                     const Event &e) const{
   for (int k = 0; k < e.sleep.size(); ++k){
@@ -1672,7 +1674,6 @@ void TSOTraceBuilder::see_events(const VecSet<int> &seen_accesses){
     if(i < 0) continue;
     if (i == prefix_idx) continue;
     add_noblock_race(i);
->>>>>>> efcf72d7ae9b6e56abc1d45ec11265b8c5c18acf
   }
 }
 
@@ -2058,11 +2059,13 @@ void TSOTraceBuilder::race_detect
    */
   Event mutex_probe_event({-1,0});
 
+  /*
   VecSet<IPid> isleep = sleep_set_at(i);
   if(bound_reset){
     bound_reset = false;
     isleep = sleep_set_at(0);
   }
+  */
   /* candidates is a map from IPid p to event index i such that the
    * IID (p,i) identifies an event between prefix[i] (exclusive) and
    * prefix[j] (inclusive) such that (p,i) does not happen-after any

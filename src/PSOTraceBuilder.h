@@ -66,6 +66,7 @@ public:
   virtual int cond_destroy(const SymAddrSize &ml);
   virtual void register_alternatives(int alt_count);
   virtual int estimate_trace_count() const;
+  virtual bool canRunThisInstruction() {return true;};
 protected:
   /* An identifier for a thread. An index into this->threads.
    *

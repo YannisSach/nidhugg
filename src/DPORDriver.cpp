@@ -197,8 +197,6 @@ DPORDriver::Result DPORDriver::run(){
     TB = new TSOTraceBuilder(conf);
     //Yannis
     TB->bound_cnt = 0;
-    TB->bound_reset = false;
-    TB->hard_reset_allowed = 10;
     TB->branches_rejected = 0;
     break;
   case Configuration::TSO:
